@@ -3,10 +3,12 @@ import sys
 import json
 import requests
 import traceback
-from params import *
-from unidecode import unidecode
 import pandas as pd
 from csv import writer
+from unidecode import unidecode
+from timeit import default_timer as timer
+
+from params import *
 
 names_variation_list = []
 # abrimos el listado de nombres sin acentos
@@ -37,9 +39,22 @@ res_authors_not_found = []
 # autores de los cuales no se halló ningún trabajo
 res_authors_no_works = []
 
+count_authors = 0
+
+# para saber cuánto tarda en hacerse el proceso
+start = None
+end = None
+
 def init():
 
     try:
+
+        global start, count_authors
+
+        start = timer()
+        
+        print(f'--> PROCESO INICIADO <--')
+
         # Abirmos la planilla de entrada
         df = pd.read_excel(io=input_file_name, sheet_name=sheet_number)
 
@@ -51,22 +66,25 @@ def init():
                 break
 
             author = df.iloc[i][author_column_number]
-            print('Search number', i)
 
-            print('Searching', author)
+            print('Búsqueda número', i + 1)
+
+            print('Buscando...', author)
 
             # Primero buscamos el nombre del autor en la api
             author_results = getAuthor(author)
 
             count_author_results = author_results['meta']['count']
 
-            print('-> Results', count_author_results)
+            print('-> Resultados', count_author_results)
 
             # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
             # y continuamos con el siguiente autor
             if count_author_results == 0:
                 res_authors_not_found.append(author)
                 continue
+            
+            count_authors += 1
 
             # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
             has_works = False
@@ -80,7 +98,7 @@ def init():
                 # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
                 author_id = authorFound['id'].rsplit('/', 1)[-1]
 
-                print('--> Matched author', author_name, author_id, f'Score: {score}')
+                print('--> Autor encontrado', author_name, author_id, f'Score: {score}')
                 
                 works_results = getWorks(author_id)
                 count_works_results = works_results['meta']['count']
@@ -120,21 +138,31 @@ def init():
 
             if has_works == 0:
                 res_authors_no_works.append(author)
-
-            writeResults()
-
-            print(f'Realizados {count_request} requests a la API')
+            
+        print(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
 
     except Exception as error:
-        writeResults()
         print(error)
         print(traceback.format_exc())
-        sys.exit('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+        print('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+
+    finally:
+        showStats()
+        writeResults()
+
+# Estadísticas a mostrar para cuando se termina de ejecutar todo el script
+def showStats():
+    end = timer()
+    print(f'Autores encontrados: {count_authors}')
+    print(f'Trabajos encontrados: {len(res_works_output)}')
+    print(f'Autores no encontrados: {len(res_authors_not_found)}')
+    print(f'Se realizaron {count_request} peticiones a la API')
+    print(f'Tiempo transcurrido: {round(end - start)} segundos')
 
 
 def writeResults():
 
-    # Creamos archivo xls conr esultados
+    # Creamos archivo xls con resultados
     writer = pd.ExcelWriter(output_file_name)
 
     # Escribimos hojas
@@ -148,7 +176,7 @@ def writeResults():
     # Guardamos xls
     writer.save()
 
-# chequeo customizado para ver si wl author tiene que ver con el matcheo
+# chequeo customizado para ver si el author tiene que ver con el matcheo
 def checkScore(author, author_api):
     
     # removemos tildes y mayúsculas
@@ -367,7 +395,7 @@ def getWorks(author_id):
     global count_request
 
     params = {
-        # only one author per request and only journal-article type
+        # sólo un autor por petición y del tipo especificado en params.py
         FILTER: f'author.id:{author_id},type:{type}',
         MAILTO: email,
         PER_PAGE: PER_PAGE_VALUE,
