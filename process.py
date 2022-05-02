@@ -28,20 +28,20 @@ FILTER = 'filter'
 
 count_request = 0
 
+# lista final con todos los trabajos encontrados
+res_works_output = []
+
+# autores que no se encontraron en la api
+res_authors_not_found = []
+
+# autores de los cuales no se halló ningún trabajo
+res_authors_no_works = []
+
 def init():
 
     try:
         # Abirmos la planilla de entrada
         df = pd.read_excel(io=input_file_name, sheet_name=sheet_number)
-
-        # lista final con todos los trabajos encontrados
-        res_works_output = []
-
-        # autores que no se encontraron en la api
-        res_authors_not_found = []
-
-        # autores de los cuales no se halló ningún trabajo
-        res_authors_no_works = []
 
         # loopeamos por cada fila de la planilla
         for i in range(0, len(df)):
@@ -73,12 +73,15 @@ def init():
 
             # Por cada autor encontrado buscamos sus trabajos
             for authorFound in author_results['results']:
+                author_name = authorFound['display_name']
+
+                score = checkScore(author, author_name)
 
                 # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
                 author_id = authorFound['id'].rsplit('/', 1)[-1]
-                author_name = authorFound['display_name']
 
-                print('--> Matched author', author_name, author_id)
+                print('--> Matched author', author_name, author_id, f'Score: {score}')
+                
                 works_results = getWorks(author_id)
                 count_works_results = works_results['meta']['count']
 
@@ -87,14 +90,16 @@ def init():
 
                 for workFound in works_results['results']:
                     results = {}
-
+                    
                     results['(ID)'] = i + 2
-
+                    
                     # Obtenemos las columnas presentes en el excel original
                     for col in list(df.columns):
                         results[col] = df[col][i]
 
                     results['Autor encontrado'] = author_name
+
+                    results['Score'] = score
 
                     for column_to_save in works_columns_to_save:
 
@@ -116,27 +121,118 @@ def init():
             if has_works == 0:
                 res_authors_no_works.append(author)
 
-        # Creamos archivo xls conr esultados
-        writer = pd.ExcelWriter(output_file_name)
+            writeResults()
 
-        # Escribimos hojas
-        pd.DataFrame(res_works_output).to_excel(
-            writer, sheet_name='Resultados', header=True, index=False)
-        pd.DataFrame(res_authors_not_found).to_excel(
-            writer, sheet_name='Autores no encontrados', header=True, index=False)
-        pd.DataFrame(res_authors_no_works).to_excel(
-            writer, sheet_name='Autores sin works', header=True, index=False)
-
-        print(f'Realizados {count_request} requests a la API')
-
-        # Guardamos xls
-        writer.save()
+            print(f'Realizados {count_request} requests a la API')
 
     except Exception as error:
+        writeResults()
         print(error)
         print(traceback.format_exc())
         sys.exit('ATENCIÓN, hubo errores en el procesamiento')  # oh no
 
+
+def writeResults():
+
+    # Creamos archivo xls conr esultados
+    writer = pd.ExcelWriter(output_file_name)
+
+    # Escribimos hojas
+    pd.DataFrame(res_works_output).to_excel(
+        writer, sheet_name='Resultados', header=True, index=False)
+    pd.DataFrame(res_authors_not_found).to_excel(
+        writer, sheet_name='Autores no encontrados', header=True, index=False)
+    pd.DataFrame(res_authors_no_works).to_excel(
+        writer, sheet_name='Autores sin works', header=True, index=False)
+    
+    # Guardamos xls
+    writer.save()
+
+# chequeo customizado para ver si wl author tiene que ver con el matcheo
+def checkScore(author, author_api):
+    
+    # removemos tildes y mayúsculas
+    author_api_nomalized = unidecode(author_api.lower())
+    author_api_nomalized = author_api_nomalized.replace('and ', '').replace('.', '').replace('-', '')
+
+    # removemos mayúsculas
+    author_normalized = unidecode(author.lower())
+    s = author_normalized.split(',')
+
+    surname = s[0]
+    names = s[1].strip().split(' ')
+    first_name = names[0]
+    second_name = f' {names[1]}' if len(names) > 1 else ''
+    initial_second_name = f' {second_name[1]}' if second_name != '' else ''
+
+    val = 0
+
+    skip = False
+
+    # si el nombre aparece completo y en el orden exacto
+    if (f'{first_name}{second_name} {surname}' in author_api_nomalized):
+        val = 100
+        skip = True
+
+    # si el nombre aparece en el orden exacto, pero abreviado el segundo nombre
+    elif (f'{first_name}{initial_second_name} {surname}' in author_api_nomalized):
+        val = 95
+        skip = True
+
+    # si está presente el apellido, el primer nombre y el segundo, match casi perfecto
+    elif (surname in author_api_nomalized) \
+        and (first_name in author_api_nomalized) \
+        and (second_name in author_api_nomalized):
+        val = 90
+
+    # si está presente el apellido, primer nombre e inicial del segundo, math bastante bueno
+    elif (surname in author_api_nomalized) \
+        and (first_name in author_api_nomalized) \
+        and (f'{initial_second_name} ' in author_api_nomalized):
+        val = 70
+
+    else:
+        matchs = 0
+        for words in author_normalized.split(' '):
+            for wordsApi in author_api_nomalized.split(' '):
+                match = similarity(words, wordsApi)
+                if (match > 70):
+                    matchs += 1
+                    continue
+
+        if matchs == len(author_normalized.split(' ')):
+            val = 70
+        else:
+            #apellido y nombres completos (sin segundo nombre)
+            if (surname in author_api_nomalized) \
+            and (first_name in author_api_nomalized):
+                val = 40
+
+
+    if not skip:
+        # si a la api le sobran palabras, lo tomamos como un mal indicio
+        if len(author_api_nomalized.split(' ')) > len(author_normalized.split(' ')):
+            val = val - 50
+
+        # si a la api le faltan palabras, probablemente sea el segundo nombre, no es tan grave
+        if len(author_api_nomalized.split(' ')) < len(author_normalized.split(' ')):
+            val = val - 20
+
+        # chequeamos si el segundo nombre devuelto por la api existe en el nombre original
+        second_name = author_api_nomalized.split(' ')[1]
+        m = False
+        # y si lo que está puesto como segundo nombre es una abreviatura, chequeamos que exista como tal
+        second_name = second_name if len(second_name) > 1 else f' {second_name}'
+        for wordsApi in author_normalized.split(' '):
+            match = similarity(second_name, wordsApi)
+            if (match > 70):
+                m = True
+                break
+        
+        if m == False:
+            val = val - 70
+
+    return val if val > 0 else 0
 
 def getValues(cols, api_columns_values, results, join=False, num=''):
 
@@ -289,6 +385,24 @@ def getWorks(author_id):
     count_request += 1
 
     return data
+
+def similarity(s1, s2):
+     return 2. * len(longest_common_substring(s1, s2)) / (len(s1) + len(s2)) * 100
+
+def longest_common_substring(s1, s2):
+    m = [[0] * (1 + len(s2)) for i in range(1 + len(s1))]
+    longest, x_longest = 0, 0
+    for x in range(1, 1 + len(s1)):
+        for y in range(1, 1 + len(s2)):
+            if s1[x - 1] == s2[y - 1]:
+                m[x][y] = m[x - 1][y - 1] + 1
+                if m[x][y] > longest:
+                    longest = m[x][y]
+                    x_longest = x
+            else:
+                m[x][y] = 0
+    return s1[x_longest - longest: x_longest]
+
 
 
 init()
