@@ -11,12 +11,21 @@ from timeit import default_timer as timer
 from params import *
 
 names_variation_list = []
+
 # abrimos el listado de nombres sin acentos
 f = open('nombres-acento.json', encoding="utf8")
-data = json.load(f)
+data_names_accents = json.load(f)
 # Por cada nombre, creamos su versión sin tildes y guardamos ambas en una lista
-for i in data:
+for i in data_names_accents:
     names_variation_list.append([i, unidecode(i)])
+
+surnames_variation_list = []
+f = open('apellidos-acento.json', encoding="utf8")
+data_surnames_accents = json.load(f)
+
+# Por cada nombre, creamos su versión sin tildes y guardamos ambas en una lista
+for i in data_surnames_accents:
+    surnames_variation_list.append([i, unidecode(i)])
 
 # API URL y ENDPOINTS
 API_URL = 'https://api.openalex.org'
@@ -92,6 +101,7 @@ def init():
             # Por cada autor encontrado buscamos sus trabajos
             for authorFound in author_results['results']:
                 author_name = authorFound['display_name']
+                relevance_score = authorFound['relevance_score'] if 'relevance_score' in authorFound else None
 
                 score = checkScore(author, author_name)
 
@@ -116,6 +126,8 @@ def init():
                         results[col] = df[col][i]
 
                     results['Autor encontrado'] = author_name
+
+                    results['relevance_score'] = relevance_score
 
                     results['Score'] = score
 
@@ -344,17 +356,25 @@ def getAuthor(author):
     # removemos espacios vacíos
     names = a[1].strip()
 
-    # Buscamos cada uno de los nombres del autor en el listado de nombres con acentos
-    for nombre in names_variation_list:
-        name_with_accents = nombre[0]
-        name_no_accents = nombre[1]
+    if use_accent_variation == True:
+        for surname_acc in surnames_variation_list:
+            surname_with_accents = surname_acc[0]
+            surname_no_accents = surname_acc[1]
 
-        # Si hay un matcheo, hacemos reemplazo del nombre poniendo la versión con tildes
-        if name_no_accents in names:
-            names = names.replace(name_with_accents, name_no_accents)
+            if surname_no_accents in surname:
+                surname = names.replace(surname_with_accents, surname_no_accents)
+
+        # Buscamos cada uno de los nombres del autor en el listado de nombres con acentos
+        for nombre in names_variation_list:
+            name_with_accents = nombre[0]
+            name_no_accents = nombre[1]
+
+            # Si hay un matcheo, hacemos reemplazo del nombre poniendo la versión con tildes
+            if name_no_accents in names:
+                names = names.replace(name_with_accents, name_no_accents)
 
     # si está activado para que solo se use el primer nombre
-    if only_use_first_name:
+    if use_second_name:
         # separamos en espacios para obtener primer y segundo nombre
         names = names.split(' ')
 

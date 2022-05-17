@@ -1,6 +1,6 @@
 # Limitar cantidad de filas a evaluar
 # Limitar a un número bajo en testeos
-limit_results = 10
+limit_results = 3
 
 # Añadir correo para entrar en el "polite pool" de la api
 email = 'gastonzalba@outlook.com'
@@ -19,10 +19,15 @@ output_file_name = 'openalex-results.xlsx'
 # Poner `True` para utilizar solamente el primer nombre en la búsqueda en la API. Esto es útil
 # porque de otro modo autores cargados sin el segundo nombre (o con una versión abreviada) no
 # matchean la búsqueda.
-only_use_first_name = True
+use_second_name = True
+
+use_fullname = True
 
 # Filtramos los works que son journal-article
 type = 'journal-article'
+
+# True para agregar tildes a través del matcheo comparativo con las listas
+use_accent_variation = True
 
 # Columnas que serán guardadas
 works_columns_to_save = [
