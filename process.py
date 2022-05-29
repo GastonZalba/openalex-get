@@ -508,13 +508,13 @@ def getWorks(author_id, page = 1):
     data = r.json()
 
     count_request += 1
-    print('Obteniendo works, página', page)
+    
+    print(f'Obteniendo trabajos del autor {author_id}, página', page)
 
     if data['meta']['count'] > PER_PAGE_VALUE * page:        
         new_page = getWorks(author_id, page + 1)    
         data['results'] = [*data['results'], *new_page['results']]
 
-    print(len(data['results']))
     return data
 
 init()
