@@ -280,7 +280,6 @@ def writeResults():
     writeSheet(res_works_output, 'Resultados')
     writeSheet({'Listado': res_authors_not_found}, 'Autores no encontrados')
     writeSheet({'Listado': res_authors_no_works}, 'Autores sin works')
-    writeSheet({'Listado': res_authors_no_country_code}, 'Autores sin country_code')
 
     # Guardamos valores del procesamiento
     params = {
