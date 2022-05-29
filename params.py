@@ -4,7 +4,7 @@ continue_from_last_file = True
 
 # Limitar cantidad de filas a evaluar
 # Limitar a un número bajo en testeos
-limit_results = 2
+limit_results = 200
 
 # None para no usar este filtro
 # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution

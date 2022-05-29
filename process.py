@@ -130,10 +130,12 @@ def init():
 
             authors_variations = 0
 
-            valid_country = False
+            has_valid_country = False
 
             # Por cada autor encontrado buscamos sus trabajos
             for author_found in author_results['results']:
+                valid_country = False
+
                 if authors_variations >= limit_authors_results:
                     break
 
@@ -141,19 +143,19 @@ def init():
                 if filter_country_code is not None:
 
                     if author_found['last_known_institution'] is None:
-                        res_authors_no_country_code.append(author)
                         valid_country = None
                     else:
                         # Si el autor no es de este país, continuamos
                         if author_found['last_known_institution']['country_code'] in filter_country_code:
                             valid_country = True
+                            has_valid_country = True
 
                 author_name = author_found['display_name']
                 relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
                 
                 # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
                 if authors_variations > 0:
-                    if relevance_score is None or relevance_score < min_relevance_score or valid_country == False:
+                    if relevance_score is None or relevance_score < min_relevance_score or valid_country == False or valid_country == None:
                         continue
 
                 authors_variations += 1
@@ -179,6 +181,7 @@ def init():
                                     # Si un autorship de un trabajo es coincidente, lo tomamos como válido
                                     if inst['country_code'] in filter_country_code:
                                         valid_country = True
+                                        has_valid_country = True
                         except:
                             valid_country = False
                 
@@ -196,10 +199,10 @@ def init():
                         results[col] = df[col][i]
 
                     results['Autor encontrado'] = author_name
+                    results['Autor encontrado id'] = author_id
+                    results['Código de país válido'] = valid_country
 
                     results['relevance_score'] = relevance_score
-
-                    results['Código de país válido'] = valid_country
 
                     for column_to_save in works_columns_to_save:
 
@@ -218,6 +221,9 @@ def init():
                                   api_column_values, results, join)
   
                     res_works_output.append(results)
+            
+            if has_valid_country == False:
+                res_authors_no_country_code.append(author)
 
             if has_works == 0:
                 res_authors_no_works.append(author)
@@ -463,7 +469,7 @@ def getAuthor(author):
         PER_PAGE: PER_PAGE_VALUE
     }
 
-    print(params)
+    # print(params[FILTER])
 
     url = API_URL + '/authors'
 
