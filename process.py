@@ -34,10 +34,11 @@ API_URL = 'https://api.openalex.org'
 
 # Parámetros de la API #
 PER_PAGE = 'per-page'
-PER_PAGE_VALUE = 200  # 200 resultados por página es el límite de la api
+PER_PAGE_VALUE = 5  # 200 resultados por página es el límite de la api
 SEARCH = 'search'
 MAILTO = 'mailto'
 FILTER = 'filter'
+PAGE = 'page'
 
 count_request = 0
 
@@ -152,26 +153,31 @@ def init():
                 
                 # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
                 if authors_variations > 0:
-                    if relevance_score is None or relevance_score < min_relevance_score or valid_country == False or valid_country == None:
+                    
+                    if valid_country == False or valid_country == None:
                         continue
+                    
+                    # if relevance_score is None or relevance_score < min_relevance_score:
+                    #     continue
 
                 # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
                 author_id = author_found['id'].rsplit('/', 1)[-1]
 
                 works_results = getWorks(author_id)
                 count_works_results = works_results['meta']['count']
-
+                
                 # check country
-                if valid_country == False:
+                if valid_country == False or valid_country is None:
                     for workFound in works_results['results']:
                         try:
                             for authorship in workFound['authorships']:
                                 for inst in authorship:
                                     # Si un autorship de un trabajo es coincidente, lo tomamos como válido
                                     if inst['country_code'] in filter_country_code:
+                                        print('a')
                                         valid_country = True
                         except:
-                            valid_country = False
+                            pass
                 
                 if valid_country == False:
                     continue
@@ -376,7 +382,7 @@ def getValues(cols, api_columns_values, results, join=False, num=''):
             results[f'{name}'] = value
 
 
-def getAuthor(author):
+def getAuthor(author, page = 1):
 
     global count_request
 
@@ -459,6 +465,7 @@ def getAuthor(author):
     params = {
         FILTER: 'display_name.search:' + '|'.join(search),
         MAILTO: email,
+        PAGE: page,
         PER_PAGE: PER_PAGE_VALUE
     }
 
@@ -478,7 +485,7 @@ def getAuthor(author):
     return data
 
 
-def getWorks(author_id):
+def getWorks(author_id, page = 1):
 
     global count_request
 
@@ -487,6 +494,7 @@ def getWorks(author_id):
         # sólo un autor por petición y del tipo especificado en params.py
         FILTER: f'author.id:{author_id},type:{type}',
         MAILTO: email,
+        PAGE: page,
         PER_PAGE: PER_PAGE_VALUE,
     }
 
@@ -500,7 +508,13 @@ def getWorks(author_id):
     data = r.json()
 
     count_request += 1
+    print('Obteniendo works, página', page)
 
+    if data['meta']['count'] > PER_PAGE_VALUE * page:        
+        new_page = getWorks(author_id, page + 1)    
+        data['results'] = [*data['results'], *new_page['results']]
+
+    print(len(data['results']))
     return data
 
 init()

@@ -24,5 +24,4 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 - La API no normaliza valores con y sin tilde, por lo que una búsqueda con "José" no matchea con "Jose", y a la inversa. Para mitigar esto se utiliza el archivo "nombres-acento.json" que tiene un listado de nombres frecuentes que llevan tilde. Al hacer cada búsqueda, si el nombre del autor en el excel de entrada -sin tilde- matchea alguno de esos nombres, se reemplaza la palabra por su versión con tilde. Posteriormente se hace una búsqueda doble (en un solo request) de cada autor: con y sin tilde.
 
 ## TODO
-- Ver si es necesaria manejar paginación (si alguno de los resultados supera los 200 elementos)
 - Actualizar README
