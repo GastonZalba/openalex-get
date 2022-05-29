@@ -1,5 +1,6 @@
+import io
 import re
-import sys
+import os
 import json
 import requests
 import traceback
@@ -7,6 +8,7 @@ import pandas as pd
 from csv import writer
 from unidecode import unidecode
 from timeit import default_timer as timer
+import time
 
 from params import *
 
@@ -48,30 +50,58 @@ res_authors_not_found = []
 # autores de los cuales no se halló ningún trabajo
 res_authors_no_works = []
 
+res_authors_no_country_code = []
+
 count_authors = 0
+
+process_number = 0
+
+elapsed_time = 0
+
+last_row = 1
 
 # para saber cuánto tarda en hacerse el proceso
 start = None
 end = None
 
+params_sheet = 'Params'
+
+append_existing_results = False
+
 def init():
 
     try:
 
-        global start, count_authors
+        global start, count_authors, elapsed_time, process_number, last_row, append_existing_results
 
         start = timer()
-        
+
         print(f'--> PROCESO INICIADO <--')
 
         # Abirmos la planilla de entrada
-        df = pd.read_excel(io=input_file_name, sheet_name=sheet_number)
+        df = pd.read_excel(io=input_file_name, sheet_name=sheet_number, engine='openpyxl')
+        
+        # 0 si se empieza un archivo nuevo
+        init_row_in = 0
+
+        if continue_from_last_file == True:
+            if os.path.exists(output_file_name + '.xlsx'):
+                with open(output_file_name + '.xlsx', "rb") as f:
+                    file_io_obj = io.BytesIO(f.read())
+
+                df_prev = pd.read_excel(file_io_obj, sheet_name=params_sheet, engine='openpyxl')
+                process_number = df_prev['Procesamiento número'].iloc[-1]
+
+                # Establecemos el valor de comienzo del loop para que continúe desde el último elemento
+                init_row_in = df_prev['Último elemento'].iloc[-1]
+                append_existing_results = True
+                print('Procesamiento se continúa desde el autor número', init_row_in )
 
         # loopeamos por cada fila de la planilla
-        for i in range(0, len(df)):
+        for i in range(init_row_in, len(df)):
 
             # si no hay límite establecido se loopean por todos los valores
-            if i >= limit_results:
+            if i >= limit_results + init_row_in:
                 break
 
             author = df.iloc[i][author_column_number]
@@ -92,35 +122,75 @@ def init():
             if count_author_results == 0:
                 res_authors_not_found.append(author)
                 continue
-            
+
             count_authors += 1
 
             # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
             has_works = False
 
-            # Por cada autor encontrado buscamos sus trabajos
-            for authorFound in author_results['results']:
-                author_name = authorFound['display_name']
-                relevance_score = authorFound['relevance_score'] if 'relevance_score' in authorFound else None
+            authors_variations = 0
 
-                score = checkScore(author, author_name)
+            valid_country = False
+
+            # Por cada autor encontrado buscamos sus trabajos
+            for author_found in author_results['results']:
+                if authors_variations >= limit_authors_results:
+                    break
+
+                # Si está seteado el filtro, sólo nos quedamos con los autores de un determinado país
+                if filter_country_code is not None:
+
+                    if author_found['last_known_institution'] is None:
+                        res_authors_no_country_code.append(author)
+                        valid_country = None
+                    else:
+                        # Si el autor no es de este país, continuamos
+                        if author_found['last_known_institution']['country_code'] in filter_country_code:
+                            valid_country = True
+
+                author_name = author_found['display_name']
+                relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
+                
+                # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
+                if authors_variations > 0:
+                    if relevance_score is None or relevance_score < min_relevance_score or valid_country == False:
+                        continue
+
+                authors_variations += 1
 
                 # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
-                author_id = authorFound['id'].rsplit('/', 1)[-1]
+                author_id = author_found['id'].rsplit('/', 1)[-1]
 
-                print('--> Autor encontrado', author_name, author_id, f'Score: {score}')
-                
+                print('--> Autor encontrado', author_name,
+                      author_id, f'Score: {relevance_score}')
+
                 works_results = getWorks(author_id)
                 count_works_results = works_results['meta']['count']
 
                 if count_works_results != 0:
                     has_works = True
 
-                for workFound in works_results['results']:
+                # check country
+                if valid_country == False:
+                    for workFound in works_results['results']:
+                        try:
+                            for authorship in workFound['authorships']:
+                                for inst in authorship:
+                                    # Si un autorship de un trabajo es coincidente, lo tomamos como válido
+                                    if inst['country_code'] in filter_country_code:
+                                        valid_country = True
+                        except:
+                            valid_country = False
+                
+                if valid_country == False:
+                    continue
+
+                for workFound in works_results['results']:                                    
                     results = {}
                     
-                    results['(ID)'] = i + 2
-                    
+                    last_row = i + 1
+                    results['(ID)'] = last_row
+
                     # Obtenemos las columnas presentes en el excel original
                     for col in list(df.columns):
                         results[col] = df[col][i]
@@ -129,13 +199,13 @@ def init():
 
                     results['relevance_score'] = relevance_score
 
-                    results['Score'] = score
+                    results['Código de país válido'] = valid_country
 
                     for column_to_save in works_columns_to_save:
 
-                        # chequeamos si la columna está seteada para hacerun join de valores
+                        # chequeamos si la columna está seteada para hacer un join de valores
                         j = column_to_save.split(':join')
-                        
+
                         column_to_save = j[0]
 
                         join = True if len(j) > 1 else False
@@ -144,13 +214,14 @@ def init():
 
                         api_column_values = workFound[subcolumns_list[0]]
 
-                        getValues(subcolumns_list, api_column_values, results, join)
-
+                        getValues(subcolumns_list,
+                                  api_column_values, results, join)
+  
                     res_works_output.append(results)
 
             if has_works == 0:
                 res_authors_no_works.append(author)
-            
+
         print(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
 
     except Exception as error:
@@ -159,120 +230,83 @@ def init():
         print('ATENCIÓN, hubo errores en el procesamiento')  # oh no
 
     finally:
+        end = timer()
+        elapsed_time = round(end - start)
         showStats()
         writeResults()
 
-# Estadísticas a mostrar para cuando se termina de ejecutar todo el script
+
 def showStats():
-    end = timer()
+    '''
+    Estadísticas a mostrar para cuando se termina de ejecutar todo el script
+    '''
     print(f'Autores encontrados: {count_authors}')
     print(f'Trabajos encontrados: {len(res_works_output)}')
     print(f'Autores no encontrados: {len(res_authors_not_found)}')
-    print(f'Se realizaron {count_request} peticiones a la API')
-    print(f'Tiempo transcurrido: {round(end - start)} segundos')
+    print(f'Autores sin "country_code": {len(res_authors_no_country_code)}')
+    print(f'Peticiones a la API: {count_request}')
+    print(f'Tiempo transcurrido (segundos): {elapsed_time}')
 
 
 def writeResults():
+    '''
+    Guardamos los resultados en un archivo Excel
+    '''
+
+    def writeSheet(results, sheet_name, header=True, index=False):
+        
+        df = pd.DataFrame(results)
+
+        # Si hay que continuar un archivo existente, agregamos las nuevas filas al final
+        if append_existing_results:
+            with open(output_file_name + '.xlsx', "rb") as f:
+                file_io_obj = io.BytesIO(f.read())
+
+            df_prev = pd.read_excel(file_io_obj, sheet_name=sheet_name, engine='openpyxl')
+            df = pd.concat([df_prev, df], axis=0)
+
+        df.to_excel(
+            writer, sheet_name=sheet_name, header=header, index=index
+        )
+
+    tmp_filename = output_file_name + '_tmp' + '.xlsx'
 
     # Creamos archivo xls con resultados
-    writer = pd.ExcelWriter(output_file_name)
+    writer = pd.ExcelWriter(tmp_filename)
+    
+    print('Escribiendo archivo...')
 
     # Escribimos hojas
-    pd.DataFrame(res_works_output).to_excel(
-        writer, sheet_name='Resultados', header=True, index=False)
-    pd.DataFrame(res_authors_not_found).to_excel(
-        writer, sheet_name='Autores no encontrados', header=True, index=False)
-    pd.DataFrame(res_authors_no_works).to_excel(
-        writer, sheet_name='Autores sin works', header=True, index=False)
-    
+    writeSheet(res_works_output, 'Resultados')
+    writeSheet({'Listado': res_authors_not_found}, 'Autores no encontrados')
+    writeSheet({'Listado': res_authors_no_works}, 'Autores sin works')
+    writeSheet({'Listado': res_authors_no_country_code}, 'Autores sin country_code')
+
+    # Guardamos valores del procesamiento
+    params = {
+        'Procesamiento número': process_number + 1,
+        'Autores encontrados': count_authors,
+        'Trabajos encontrados': len(res_works_output),
+        'Autores no encontrados': len(res_authors_not_found),
+        'Peticiones a la API': count_request,
+        'Tiempo transcurrido (segundos)': elapsed_time,
+        'Fecha': time.strftime("%c"),
+        'Último elemento': last_row
+    }
+
+    writeSheet(pd.DataFrame(params, index=[0]), params_sheet)
+
     # Guardamos xls
-    writer.save()
+    writer.close()
 
-# chequeo customizado para ver si el author tiene que ver con el matcheo
-def checkScore(author, author_api):
-    
-    # removemos tildes y mayúsculas
-    author_api_nomalized = unidecode(author_api.lower())
-    author_api_nomalized = author_api_nomalized.replace('and ', '').replace('.', '').replace('-', '')
+    if append_existing_results:
+        # Removemos archivo viejo
+        os.remove(output_file_name + '.xlsx')
 
-    # removemos mayúsculas
-    author_normalized = unidecode(author.lower())
-    s = author_normalized.split(',')
+    # Renombramos temporal
+    os.rename(tmp_filename, output_file_name + '.xlsx')
 
-    surname = s[0]
-    names = s[1].strip().split(' ')
-    first_name = names[0]
-    second_name = f' {names[1]}' if len(names) > 1 else ''
-    initial_second_name = f' {second_name[1]}' if second_name != '' else ''
-
-    val = 0
-
-    skip = False
-
-    # si el nombre aparece completo y en el orden exacto
-    if (f'{first_name}{second_name} {surname}' in author_api_nomalized):
-        val = 100
-        skip = True
-
-    # si el nombre aparece en el orden exacto, pero abreviado el segundo nombre
-    elif (f'{first_name}{initial_second_name} {surname}' in author_api_nomalized):
-        val = 95
-        skip = True
-
-    # si está presente el apellido, el primer nombre y el segundo, match casi perfecto
-    elif (surname in author_api_nomalized) \
-        and (first_name in author_api_nomalized) \
-        and (second_name in author_api_nomalized):
-        val = 90
-
-    # si está presente el apellido, primer nombre e inicial del segundo, math bastante bueno
-    elif (surname in author_api_nomalized) \
-        and (first_name in author_api_nomalized) \
-        and (f'{initial_second_name} ' in author_api_nomalized):
-        val = 70
-
-    else:
-        matchs = 0
-        for words in author_normalized.split(' '):
-            for wordsApi in author_api_nomalized.split(' '):
-                match = similarity(words, wordsApi)
-                if (match > 70):
-                    matchs += 1
-                    continue
-
-        if matchs == len(author_normalized.split(' ')):
-            val = 70
-        else:
-            #apellido y nombres completos (sin segundo nombre)
-            if (surname in author_api_nomalized) \
-            and (first_name in author_api_nomalized):
-                val = 40
-
-
-    if not skip:
-        # si a la api le sobran palabras, lo tomamos como un mal indicio
-        if len(author_api_nomalized.split(' ')) > len(author_normalized.split(' ')):
-            val = val - 50
-
-        # si a la api le faltan palabras, probablemente sea el segundo nombre, no es tan grave
-        if len(author_api_nomalized.split(' ')) < len(author_normalized.split(' ')):
-            val = val - 20
-
-        # chequeamos si el segundo nombre devuelto por la api existe en el nombre original
-        second_name = author_api_nomalized.split(' ')[1]
-        m = False
-        # y si lo que está puesto como segundo nombre es una abreviatura, chequeamos que exista como tal
-        second_name = second_name if len(second_name) > 1 else f' {second_name}'
-        for wordsApi in author_normalized.split(' '):
-            match = similarity(second_name, wordsApi)
-            if (match > 70):
-                m = True
-                break
-        
-        if m == False:
-            val = val - 70
-
-    return val if val > 0 else 0
+    print('--> Archivo creado con éxito <--')
 
 def getValues(cols, api_columns_values, results, join=False, num=''):
 
@@ -302,7 +336,7 @@ def getValues(cols, api_columns_values, results, join=False, num=''):
                     l.append(a[cols[1]])
             else:
                 l.append(a)
-        
+
         results[f'{name}'] = ', '.join(str(v) for v in l)
 
     else:
@@ -311,7 +345,7 @@ def getValues(cols, api_columns_values, results, join=False, num=''):
                 getValues(cols, val, results, join=False, num=i+1)
 
         else:
-            
+
             value = ''
             name += cols[0].upper()
 
@@ -347,54 +381,89 @@ def getAuthor(author):
 
     global count_request
 
+    search = []
+
+    def createAccentVariation(string_to_search):
+        def is_ascii(s):
+            """Check if the characters in string s are in ASCII, U+0-U+7F."""
+            return len(s) == len(s.encode())
+
+        if use_accent_variation == True:
+            
+            # separamos el string en palabras
+            strings = string_to_search.split(' ')
+            
+            accented_strings = []
+
+            for original_string in strings: 
+                
+                modified_string = original_string
+
+                # reemplazamos apellidos
+                for s in surnames_variation_list:
+                    surname_with_accents = s[0]
+                    surname_no_accents = s[1]
+
+                    if surname_no_accents == original_string:
+                        modified_string = surname_with_accents
+
+                # Buscamos cada uno de los nombres del autor en el listado de nombres con acentos
+                for n in names_variation_list:
+                    name_with_accents = n[0]
+                    name_no_accents = n[1]
+
+                    # Si hay un matcheo, hacemos reemplazo del nombre poniendo la versión con tildes
+                    if name_no_accents == original_string:
+                        modified_string = name_with_accents
+
+                accented_strings.append(modified_string)
+            
+            accented_strings = ' '.join(accented_strings)
+
+            search.append(accented_strings)
+
+            # Si tiene acentos el nombre, los removemos y lo añadimos a la búsqueda como alternativa
+            if not is_ascii(accented_strings):
+                search_without_accents = unidecode(accented_strings)
+                search.append(search_without_accents)
+
+        else:
+            search.append(string_to_search)
+
     # separamos en la coma que está luego del apellido
     a = author.split(',')
 
-    # obtenemosm sólo el apellido
+    # obtenemos sólo el apellido
     surname = a[0]
 
     # removemos espacios vacíos
     names = a[1].strip()
 
-    if use_accent_variation == True:
-        for surname_acc in surnames_variation_list:
-            surname_with_accents = surname_acc[0]
-            surname_no_accents = surname_acc[1]
+    if use_fullname:
+        ss = f'{surname} {names}'
+        createAccentVariation(ss)
+    
+    # separamos en espacios para obtener primer y segundo nombre
+    names = names.split(' ')
+    first_name = names[0]
 
-            if surname_no_accents in surname:
-                surname = names.replace(surname_with_accents, surname_no_accents)
+    if use_first_name_initial_second_name and len(names) > 1:
+        second_name = names[1]
+        ss = f'{surname} {first_name} {second_name[0]}'
+        createAccentVariation(ss)
 
-        # Buscamos cada uno de los nombres del autor en el listado de nombres con acentos
-        for nombre in names_variation_list:
-            name_with_accents = nombre[0]
-            name_no_accents = nombre[1]
-
-            # Si hay un matcheo, hacemos reemplazo del nombre poniendo la versión con tildes
-            if name_no_accents in names:
-                names = names.replace(name_with_accents, name_no_accents)
-
-    # si está activado para que solo se use el primer nombre
-    if use_second_name:
-        # separamos en espacios para obtener primer y segundo nombre
-        names = names.split(' ')
-
-        first_name = names[0]
+    if use_first_name_only and len(names) > 1:
         # Sólo buscamos por apellido y primer nombre
-        search = f'{surname} {first_name}'
-
-    else:
-        search = f'{surname} {names}'
-
-    # Si tiene acentos el nombre, los removemos y lo añadimos a la búsqueda como alternativa
-    if re.match('^[a-zA-Z]+$', search):
-        search_without_accents = unidecode(search)
-        search += f'|{search_without_accents}'
-
+        ss = f'{surname} {first_name}'
+        createAccentVariation(ss)
+    
     params = {
-        SEARCH: search,
+        FILTER: 'display_name.search:' + '|'.join(search),
         MAILTO: email,
         PER_PAGE: PER_PAGE_VALUE
     }
+
+    print(params)
 
     url = API_URL + '/authors'
 
@@ -404,16 +473,17 @@ def getAuthor(author):
     )
 
     data = r.json()
-    
+
     count_request += 1
 
     return data
 
 
 def getWorks(author_id):
-    
+
     global count_request
 
+    # se podría agregar institutions.country_code?
     params = {
         # sólo un autor por petición y del tipo especificado en params.py
         FILTER: f'author.id:{author_id},type:{type}',
@@ -433,24 +503,5 @@ def getWorks(author_id):
     count_request += 1
 
     return data
-
-def similarity(s1, s2):
-     return 2. * len(longest_common_substring(s1, s2)) / (len(s1) + len(s2)) * 100
-
-def longest_common_substring(s1, s2):
-    m = [[0] * (1 + len(s2)) for i in range(1 + len(s1))]
-    longest, x_longest = 0, 0
-    for x in range(1, 1 + len(s1)):
-        for y in range(1, 1 + len(s2)):
-            if s1[x - 1] == s2[y - 1]:
-                m[x][y] = m[x - 1][y - 1] + 1
-                if m[x][y] > longest:
-                    longest = m[x][y]
-                    x_longest = x
-            else:
-                m[x][y] = 0
-    return s1[x_longest - longest: x_longest]
-
-
 
 init()

@@ -1,9 +1,23 @@
+# Si está en False, el xls anterior se borra y se comienza uno nuevo.
+# Si está en True se continúa desde donde se dejó
+continue_from_last_file = True
+
 # Limitar cantidad de filas a evaluar
 # Limitar a un número bajo en testeos
-limit_results = 3
+limit_results = 2
+
+# None para no usar este filtro
+# Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
+# El valor debe ser una lista, y se puede incluir más de un valor
+filter_country_code = ['AR']
+
+# Límite para devolver cantidad de autores matcheados
+limit_authors_results = 2
+
+min_relevance_score = 50
 
 # Añadir correo para entrar en el "polite pool" de la api
-email = 'gastonzalba@outlook.com'
+email = 'tatoz12@hotmail.com'
 
 # Configuración del Excel usado como input
 input_file_name = 'input.xlsx'
@@ -14,12 +28,11 @@ author_column_number = 0
 # número de hoja donde se encuentran los nombres de los autores (comeinza en 0)
 sheet_number = 1
 
-output_file_name = 'openalex-results.xlsx'
+output_file_name = 'openalex-results'
 
-# Poner `True` para utilizar solamente el primer nombre en la búsqueda en la API. Esto es útil
-# porque de otro modo autores cargados sin el segundo nombre (o con una versión abreviada) no
-# matchean la búsqueda.
-use_second_name = True
+use_first_name_only = True
+
+use_first_name_initial_second_name = True
 
 use_fullname = True
 
