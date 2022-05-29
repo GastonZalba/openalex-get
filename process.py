@@ -130,8 +130,6 @@ def init():
 
             authors_variations = 0
 
-            has_valid_country = False
-
             # Por cada autor encontrado buscamos sus trabajos
             for author_found in author_results['results']:
                 valid_country = False
@@ -148,7 +146,6 @@ def init():
                         # Si el autor no es de este país, continuamos
                         if author_found['last_known_institution']['country_code'] in filter_country_code:
                             valid_country = True
-                            has_valid_country = True
 
                 author_name = author_found['display_name']
                 relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
@@ -158,19 +155,11 @@ def init():
                     if relevance_score is None or relevance_score < min_relevance_score or valid_country == False or valid_country == None:
                         continue
 
-                authors_variations += 1
-
                 # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
                 author_id = author_found['id'].rsplit('/', 1)[-1]
 
-                print('--> Autor encontrado', author_name,
-                      author_id, f'Score: {relevance_score}')
-
                 works_results = getWorks(author_id)
                 count_works_results = works_results['meta']['count']
-
-                if count_works_results != 0:
-                    has_works = True
 
                 # check country
                 if valid_country == False:
@@ -181,12 +170,19 @@ def init():
                                     # Si un autorship de un trabajo es coincidente, lo tomamos como válido
                                     if inst['country_code'] in filter_country_code:
                                         valid_country = True
-                                        has_valid_country = True
                         except:
                             valid_country = False
                 
                 if valid_country == False:
                     continue
+                
+                if count_works_results != 0:
+                    has_works = True
+                
+                print('--> Autor encontrado', author_name,
+                      author_id, f'Score: {relevance_score}')
+
+                authors_variations += 1
 
                 for workFound in works_results['results']:                                    
                     results = {}
@@ -222,9 +218,7 @@ def init():
   
                     res_works_output.append(results)
             
-            if has_valid_country == False:
-                res_authors_no_country_code.append(author)
-
+    
             if has_works == 0:
                 res_authors_no_works.append(author)
 
@@ -249,7 +243,7 @@ def showStats():
     print(f'Autores encontrados: {count_authors}')
     print(f'Trabajos encontrados: {len(res_works_output)}')
     print(f'Autores no encontrados: {len(res_authors_not_found)}')
-    print(f'Autores sin "country_code": {len(res_authors_no_country_code)}')
+    print(f'Autores sin trabajos: {len(res_authors_no_works)}')
     print(f'Peticiones a la API: {count_request}')
     print(f'Tiempo transcurrido (segundos): {elapsed_time}')
 
