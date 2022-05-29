@@ -26,3 +26,4 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 ## TODO
 - Que la opción de continuar o rehacer archivo se pregunte por consola y no desde params.py
 - Actualizar README
+- Ordenar columnas
