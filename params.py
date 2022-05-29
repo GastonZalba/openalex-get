@@ -37,6 +37,7 @@ use_first_name_initial_second_name = True
 use_fullname = True
 
 # Filtramos los works que son journal-article
+# `None` para no usar filtro por tipo de publicación
 type = 'journal-article'
 
 # True para agregar tildes a través del matcheo comparativo con las listas

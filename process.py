@@ -170,13 +170,13 @@ def init():
                 if valid_country == False or valid_country is None:
                     for workFound in works_results['results']:
                         try:
-                            for authorship in workFound['authorships']:
-                                for inst in authorship:
+                            for autorship in workFound['authorships']:
+                                for inst in autorship['institutions']:
                                     # Si un autorship de un trabajo es coincidente, lo tomamos como válido
                                     if inst['country_code'] in filter_country_code:
-                                        print('a')
                                         valid_country = True
-                        except:
+                        except Exception as error:
+                            print(error)
                             pass
                 
                 if valid_country == False:
@@ -190,7 +190,7 @@ def init():
 
                 authors_variations += 1
 
-                for workFound in works_results['results']:                                    
+                for workFounds in works_results['results']:                                    
                     results = {}
                     
                     last_row = i + 1
@@ -217,7 +217,7 @@ def init():
 
                         subcolumns_list = column_to_save.split('.')
 
-                        api_column_values = workFound[subcolumns_list[0]]
+                        api_column_values = workFounds[subcolumns_list[0]]
 
                         getValues(subcolumns_list,
                                   api_column_values, results, join)
@@ -489,10 +489,14 @@ def getWorks(author_id, page = 1):
 
     global count_request
 
-    # se podría agregar institutions.country_code?
+    search_filter = f'author.id:{author_id}'
+
+    if type is not None:
+        search_filter += f',type:{type}'
+
     params = {
         # sólo un autor por petición y del tipo especificado en params.py
-        FILTER: f'author.id:{author_id},type:{type}',
+        FILTER: search_filter,
         MAILTO: email,
         PAGE: page,
         PER_PAGE: PER_PAGE_VALUE,
@@ -508,7 +512,7 @@ def getWorks(author_id, page = 1):
     data = r.json()
 
     count_request += 1
-    
+
     print(f'Obteniendo trabajos del autor {author_id}, página', page)
 
     if data['meta']['count'] > PER_PAGE_VALUE * page:        
