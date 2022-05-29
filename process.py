@@ -34,7 +34,7 @@ API_URL = 'https://api.openalex.org'
 
 # Parámetros de la API #
 PER_PAGE = 'per-page'
-PER_PAGE_VALUE = 5  # 200 resultados por página es el límite de la api
+PER_PAGE_VALUE = 200  # 200 resultados por página es el límite de la api
 SEARCH = 'search'
 MAILTO = 'mailto'
 FILTER = 'filter'
