@@ -35,7 +35,7 @@ use_fullname = True
 
 ## BÚSQUEDA FLEXIBLE ##
 # Búsqueda que se realiza si la primera no devuelve resultados
-loose_search_min=10
+loose_search_min = 10 # Cantidad a partir de la cual se realiza una busqueda ampliada
 limit_authors_result_loose = 1 # Cantidad de variaciones a guardar
 use_initials_name_only = True # Para autores que firman solo con las iniciales
 use_second_name_only = True # Para autores que sólo usan su segundo nombre
