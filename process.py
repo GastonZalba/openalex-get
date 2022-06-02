@@ -1,6 +1,6 @@
 import io
-import re
 import os
+import re
 import json
 import requests
 import traceback
@@ -112,120 +112,24 @@ def init():
             print('Buscando...', author)
 
             # Primero buscamos el nombre del autor en la api
-            author_results = getAuthor(author)
+            author_results = get_author_from_api(author, search_number = 2)
 
-            count_author_results = author_results['meta']['count']
-
-            print('-> Resultados', count_author_results)
-
-            # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
-            # y continuamos con el siguiente autor
-            if count_author_results == 0:
-                res_authors_not_found.append(author)
-                continue
-
-            count_authors += 1
-
-            # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
-            has_works = False
-
-            authors_variations = 0
-
-            # Por cada autor encontrado buscamos sus trabajos
-            for author_found in author_results['results']:
-                valid_country = False
-
-                if authors_variations >= limit_authors_results:
-                    break
-
-                # Si está seteado el filtro, sólo nos quedamos con los autores de un determinado país
-                if filter_country_code is not None:
-
-                    if author_found['last_known_institution'] is None:
-                        valid_country = None
-                    else:
-                        # Si el autor no es de este país, continuamos
-                        if author_found['last_known_institution']['country_code'] in filter_country_code:
-                            valid_country = True
-
-                author_name = author_found['display_name']
-                relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
-                
-                # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
-                if authors_variations > 0:
-                    
-                    if valid_country == False or valid_country == None:
-                        continue
-                    
-                    # if relevance_score is None or relevance_score < min_relevance_score:
-                    #     continue
-
-                # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
-                author_id = author_found['id'].rsplit('/', 1)[-1]
-
-                works_results = getWorks(author_id)
-                count_works_results = works_results['meta']['count']
-                
-                # check country
-                if valid_country == False or valid_country is None:
-                    for workFound in works_results['results']:
-                        try:
-                            for autorship in workFound['authorships']:
-                                for inst in autorship['institutions']:
-                                    # Si un autorship de un trabajo es coincidente, lo tomamos como válido
-                                    if inst['country_code'] in filter_country_code:
-                                        valid_country = True
-                        except Exception as error:
-                            print(error)
-                            pass
-                
-                if valid_country == False:
-                    continue
-                
-                if count_works_results != 0:
-                    has_works = True
-                
-                print('--> Autor encontrado', author_name,
-                      author_id, f'Score: {relevance_score}')
-
-                authors_variations += 1
-
-                for workFounds in works_results['results']:                                    
-                    results = {}
-                    
-                    last_row = i + 1
-                    results['(ID)'] = last_row
-
-                    # Obtenemos las columnas presentes en el excel original
-                    for col in list(df.columns):
-                        results[col] = df[col][i]
-
-                    results['Autor encontrado'] = author_name
-                    results['Autor encontrado id'] = author_id
-                    results['Código de país válido'] = valid_country
-
-                    results['relevance_score'] = relevance_score
-
-                    for column_to_save in works_columns_to_save:
-
-                        # chequeamos si la columna está seteada para hacer un join de valores
-                        j = column_to_save.split(':join')
-
-                        column_to_save = j[0]
-
-                        join = True if len(j) > 1 else False
-
-                        subcolumns_list = column_to_save.split('.')
-
-                        api_column_values = workFounds[subcolumns_list[0]]
-
-                        getValues(subcolumns_list,
-                                  api_column_values, results, join)
-  
-                    res_works_output.append(results)
-            
+            works_count = search_author(author_results, limit_authors_results, i, df)
     
-            if has_works == 0:
+            # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
+            if works_count <= loose_search_min or works_count == None:
+                print('Realizando búsqueda ampliada...', author)
+                
+                # loose search
+                author_results = get_author_from_api(author, search_number = 2)
+                works_count = search_author(author_results, limit_authors_result_loose, i, df)
+                
+            if works_count == None:
+                res_authors_not_found.append(author)
+            else:
+                count_authors += 1
+
+            if works_count == 0:
                 res_authors_no_works.append(author)
 
         print(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
@@ -313,6 +217,121 @@ def writeResults():
 
     print('--> Archivo creado con éxito <--')
 
+
+def search_author(author_results, limit_authors_results, i, df):
+    '''
+    Devuelve la cantidad de trabajos encontrados del autor según los filtros establecidos
+    '''
+    count_author_results = author_results['meta']['count']
+
+    print('-> Resultados', count_author_results)
+
+    # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
+    # y continuamos con el siguiente autor
+    if count_author_results == 0:        
+        return None
+
+    # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
+    filtered_works_count = 0
+
+    authors_variations = 0
+
+    # Por cada autor encontrado buscamos sus trabajos
+    for author_found in author_results['results']:
+        valid_country = False
+
+        if authors_variations >= limit_authors_results:
+            break
+
+        # Si está seteado el filtro, sólo nos quedamos con los autores de un determinado país
+        if filter_country_code is not None:
+
+            if author_found['last_known_institution'] is None:
+                valid_country = None
+            else:
+                # Si el autor no es de este país, continuamos
+                if author_found['last_known_institution']['country_code'] in filter_country_code:
+                    valid_country = True
+
+        author_name = author_found['display_name']
+        relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
+        
+        # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
+        if authors_variations > 0:
+            
+            if valid_country == False or valid_country == None:
+                continue
+            
+            # if relevance_score is None or relevance_score < min_relevance_score:
+            #     continue
+
+        # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
+        author_id = author_found['id'].rsplit('/', 1)[-1]
+
+        works_results = get_works_from_api(author_id)
+        count_works_results = works_results['meta']['count']
+        
+        # check country
+        if valid_country == False or valid_country is None:
+            for workFound in works_results['results']:
+                try:
+                    for autorship in workFound['authorships']:
+                        for inst in autorship['institutions']:
+                            # Si un autorship de un trabajo es coincidente, lo tomamos como válido
+                            if inst['country_code'] in filter_country_code:
+                                valid_country = True
+                except Exception as error:
+                    print(error)
+                    pass
+        
+        if valid_country == False:
+            continue
+        
+        if count_works_results != 0:
+            filtered_works_count = count_works_results
+        
+        print('--> Autor encontrado', author_name,
+                author_id, f'Score: {relevance_score}')
+
+        authors_variations += 1
+
+        for workFounds in works_results['results']:                                    
+            results = {}
+            
+            last_row = i + 1
+            results['(ID)'] = last_row
+
+            # Obtenemos las columnas presentes en el excel original
+            for col in list(df.columns):
+                results[col] = df[col][i]
+
+            results['Autor encontrado'] = author_name
+            results['Autor encontrado id'] = author_id
+            results['Código de país válido'] = valid_country
+
+            results['relevance_score'] = relevance_score
+
+            for column_to_save in works_columns_to_save:
+
+                # chequeamos si la columna está seteada para hacer un join de valores
+                j = column_to_save.split(':join')
+
+                column_to_save = j[0]
+
+                join = True if len(j) > 1 else False
+
+                subcolumns_list = column_to_save.split('.')
+
+                api_column_values = workFounds[subcolumns_list[0]]
+
+                getValues(subcolumns_list,
+                            api_column_values, results, join)
+
+            res_works_output.append(results)
+
+    return filtered_works_count
+    
+
 def getValues(cols, api_columns_values, results, join=False, num=''):
 
     name = ''
@@ -382,18 +401,18 @@ def getValues(cols, api_columns_values, results, join=False, num=''):
             results[f'{name}'] = value
 
 
-def getAuthor(author, page = 1):
+def get_author_from_api(author, search_number = 1):
 
     global count_request
 
     search = []
 
     def createAccentVariation(string_to_search):
-        def is_ascii(s):
+        def has_accents(s):
             """Check if the characters in string s are in ASCII, U+0-U+7F."""
-            return len(s) == len(s.encode())
+            return re.search(r'[àáâãäåèéêëìíîïòóôõöùúûü]+', s, flags=re.IGNORECASE)
 
-        if use_accent_variation == True:
+        if use_accent_variations == True:
             
             # separamos el string en palabras
             strings = string_to_search.split(' ')
@@ -409,7 +428,7 @@ def getAuthor(author, page = 1):
                     surname_with_accents = s[0]
                     surname_no_accents = s[1]
 
-                    if surname_no_accents == original_string:
+                    if surname_no_accents.lower() == original_string.lower():
                         modified_string = surname_with_accents
 
                 # Buscamos cada uno de los nombres del autor en el listado de nombres con acentos
@@ -418,7 +437,7 @@ def getAuthor(author, page = 1):
                     name_no_accents = n[1]
 
                     # Si hay un matcheo, hacemos reemplazo del nombre poniendo la versión con tildes
-                    if name_no_accents == original_string:
+                    if name_no_accents.lower() == original_string.lower():
                         modified_string = name_with_accents
 
                 accented_strings.append(modified_string)
@@ -428,48 +447,103 @@ def getAuthor(author, page = 1):
             search.append(accented_strings)
 
             # Si tiene acentos el nombre, los removemos y lo añadimos a la búsqueda como alternativa
-            if not is_ascii(accented_strings):
-                search_without_accents = unidecode(accented_strings)
+            if has_accents(accented_strings):
+                search_without_accents = remove_accents(accented_strings)
                 search.append(search_without_accents)
 
         else:
             search.append(string_to_search)
 
-    # separamos en la coma que está luego del apellido
-    a = author.split(',')
+    variations = author.split('//')
 
-    # obtenemos sólo el apellido
-    surname = a[0]
+    for variation in variations:
 
-    # removemos espacios vacíos
-    names = a[1].strip()
+        # separamos en la coma que está luego del apellido
+        a = variation.strip().split(',')
 
-    if use_fullname:
-        ss = f'{surname} {names}'
-        createAccentVariation(ss)
-    
-    # separamos en espacios para obtener primer y segundo nombre
-    names = names.split(' ')
-    first_name = names[0]
+        # obtenemos sólo el apellido
+        surname = a[0]
 
-    if use_first_name_initial_second_name and len(names) > 1:
-        second_name = names[1]
-        ss = f'{surname} {first_name} {second_name[0]}'
-        createAccentVariation(ss)
+        # removemos espacios vacíos
+        names = a[1].strip()
+        
+        # separamos en espacios para obtener primer y segundo nombre
+        names_list = names.split(' ')
+        first_name = names_list[0]
+        second_name = names_list[1] if len(names_list) > 1 else None
 
-    if use_first_name_only and len(names) > 1:
-        # Sólo buscamos por apellido y primer nombre
-        ss = f'{surname} {first_name}'
-        createAccentVariation(ss)
-    
+        if search_number == 1:
+
+            if use_fullname:
+                ss = f'{surname} {names}'
+                createAccentVariation(ss)
+        
+            if use_first_name_initial_second_name and second_name is not None:
+                ss = f'{surname} {first_name} {second_name[0]}'
+                createAccentVariation(ss)
+
+            if use_first_name_only and second_name is not None:
+                # Sólo buscamos por apellido y primer nombre
+                ss = f'{surname} {first_name}'
+                createAccentVariation(ss)
+            
+        else:
+
+            if use_second_name_only and second_name is not None:
+                # Sólo buscamos por apellido y segundo nombre
+                ss = f'{surname} {second_name}'
+                createAccentVariation(ss)
+            
+            if use_initials_name_only:
+                # Sólo buscamos por apellido e iniciales
+                if second_name is not None:
+                    ss = f'{surname} {first_name[0]} {second_name[0]}'
+                    createAccentVariation(ss)
+                else:
+                    ss = f'{surname} {first_name[0]}'
+                    createAccentVariation(ss)
+
+            surname_list = surname.split(' ')
+            
+            if len(surname_list) > 1:
+                if use_first_surname_only:
+
+                    if use_fullname:
+                        ss = f'{surname_list[0]} {names}'
+                        createAccentVariation(ss)
+                
+                    if use_first_name_initial_second_name and second_name is not None:
+                        ss = f'{surname_list[0]} {first_name} {second_name[0]}'
+                        createAccentVariation(ss)
+
+                    if use_first_name_only and second_name is not None:
+                        # Sólo buscamos por apellido y primer nombre
+                        ss = f'{surname_list[0]} {first_name}'
+                        createAccentVariation(ss)
+
+                if use_second_surname_only:
+                    
+                    # Usamos la segunda palabra del apellido siempre y cuando no sea "de"
+                    second_surname = surname_list[1] if surname_list[1].lower() != 'de' else surname_list[2]
+
+                    if use_fullname:
+                        ss = f'{second_surname} {names}'
+                        createAccentVariation(ss)
+                
+                    if use_first_name_initial_second_name and second_name is not None:
+                        ss = f'{second_surname} {first_name} {second_name[0]}'
+                        createAccentVariation(ss)
+
+                    if use_first_name_only and second_name is not None:
+                        # Sólo buscamos por apellido y primer nombre
+                        ss = f'{second_surname} {first_name}'
+                        createAccentVariation(ss)
+
     params = {
         FILTER: 'display_name.search:' + '|'.join(search),
         MAILTO: email,
-        PAGE: page,
         PER_PAGE: PER_PAGE_VALUE
     }
-
-    # print(params[FILTER])
 
     url = API_URL + '/authors'
 
@@ -485,7 +559,7 @@ def getAuthor(author, page = 1):
     return data
 
 
-def getWorks(author_id, page = 1):
+def get_works_from_api(author_id, page = 1):
 
     global count_request
 
@@ -516,9 +590,18 @@ def getWorks(author_id, page = 1):
     print(f'Obteniendo trabajos del autor {author_id}, página', page)
 
     if data['meta']['count'] > PER_PAGE_VALUE * page:        
-        new_page = getWorks(author_id, page + 1)    
+        new_page = get_works_from_api(author_id, page + 1)    
         data['results'] = [*data['results'], *new_page['results']]
 
     return data
+
+def remove_accents(input_str):
+    new = input_str.lower()
+    new = re.sub(r'[àáâãäå]', 'a', new)
+    new = re.sub(r'[èéêë]', 'e', new)
+    new = re.sub(r'[ìíîï]', 'i', new)
+    new = re.sub(r'[òóôõö]', 'o', new)
+    new = re.sub(r'[ùúûü]', 'u', new)
+    return new
 
 init()

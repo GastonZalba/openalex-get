@@ -3,16 +3,13 @@
 continue_from_last_file = True
 
 # Limitar cantidad de filas a evaluar
-# Limitar a un número bajo en testeos
-limit_results = 200
+# (Poner un número bajo en testeos)
+limit_results = 400
 
 # None para no usar este filtro
 # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
 # El valor debe ser una lista, y se puede incluir más de un valor
 filter_country_code = ['AR']
-
-# Límite para devolver cantidad de autores matcheados
-limit_authors_results = 2
 
 min_relevance_score = 50
 
@@ -30,18 +27,27 @@ sheet_number = 1
 
 output_file_name = 'openalex-results'
 
+## BÚSQUEDA PRINCIPAL ##
+limit_authors_results = 2 # Cantidad de variaciones a guardar
 use_first_name_only = True
-
 use_first_name_initial_second_name = True
-
 use_fullname = True
+
+## BÚSQUEDA FLEXIBLE ##
+# Búsqueda que se realiza si la primera no devuelve resultados
+loose_search_min=10
+limit_authors_result_loose = 1 # Cantidad de variaciones a guardar
+use_initials_name_only = True # Para autores que firman solo con las iniciales
+use_second_name_only = True # Para autores que sólo usan su segundo nombre
+use_first_surname_only = True # Sólo se aplica a apellidos dobles
+use_second_surname_only = True # Sólo se aplica a apellidos dobles
 
 # Filtramos los works que son journal-article
 # `None` para no usar filtro por tipo de publicación
 type = 'journal-article'
 
 # True para agregar tildes a través del matcheo comparativo con las listas
-use_accent_variation = True
+use_accent_variations = True
 
 # Columnas que serán guardadas
 works_columns_to_save = [
