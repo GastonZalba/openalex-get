@@ -1,50 +1,55 @@
-# Si está en False, el xls anterior se borra y se comienza uno nuevo.
-# Si está en True se continúa desde donde se dejó
-continue_from_last_file = True
+# Añadir correo para entrar en el "polite pool" de la api
+email = 'gastonzalba@outlook.com'
 
-# Limitar cantidad de filas a evaluar
-# (Poner un número bajo en testeos)
-limit_results = 400
+file_input = {
+    # Configuración del Excel usado como input
+    "name": 'input.xlsx',
+
+    # columna donde está guardado apellido y nombre de los autores (comienza en 0)
+    "author_column_number": 0,
+
+    # número de hoja donde se encuentran los nombres de los autores (comeinza en 0)
+    "sheet_number": 1
+}
+
+file_output = {
+    # carpeta donde se guardan los resultados
+    "folder_name": 'results',
+
+    # nombre del archivo (se agregará automáticamente la fecha de creación)
+    "name": 'openalex-results'
+}
+
+main_search = {
+    "limit_authors_results": 2,  # Cantidad de variaciones a guardar
+    "use_first_name_only": True,
+    "use_first_name_initial_second_name": True,
+    "use_fullname": True
+}
+
+# Búsqueda que se realiza si la primera no devuelve X cantidad de resultados
+secondary_search = {
+    "min": 10,  # Cantidad a partir de la cual se realiza una busqueda ampliada
+    "limit_authors_result": 1,  # Cantidad de variaciones a guardar
+    "use_first_name_only": True,
+    "use_first_name_initial_second_name": True,
+    "use_fullname": True,
+    "use_initials_name_only": True,  # Para autores que firman solo con las iniciales
+    "use_second_name_only": True,  # Para autores que sólo usan su segundo nombre
+    "use_first_surname_only": True,  # Sólo se aplica a apellidos dobles
+    "use_second_surname_only": True  # Sólo se aplica a apellidos dobles
+}
+
+min_score_relevance = 100
 
 # None para no usar este filtro
 # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
 # El valor debe ser una lista, y se puede incluir más de un valor
 filter_country_code = ['AR']
 
-min_relevance_score = 50
-
-# Añadir correo para entrar en el "polite pool" de la api
-email = 'tatoz12@hotmail.com'
-
-# Configuración del Excel usado como input
-input_file_name = 'input.xlsx'
-
-# columna donde está guardado apellido y nombre de los autores (comienza en 0)
-author_column_number = 0
-
-# número de hoja donde se encuentran los nombres de los autores (comeinza en 0)
-sheet_number = 1
-
-output_file_name = 'openalex-results'
-
-## BÚSQUEDA PRINCIPAL ##
-limit_authors_results = 2 # Cantidad de variaciones a guardar
-use_first_name_only = True
-use_first_name_initial_second_name = True
-use_fullname = True
-
-## BÚSQUEDA FLEXIBLE ##
-# Búsqueda que se realiza si la primera no devuelve resultados
-loose_search_min = 10 # Cantidad a partir de la cual se realiza una busqueda ampliada
-limit_authors_result_loose = 1 # Cantidad de variaciones a guardar
-use_initials_name_only = True # Para autores que firman solo con las iniciales
-use_second_name_only = True # Para autores que sólo usan su segundo nombre
-use_first_surname_only = True # Sólo se aplica a apellidos dobles
-use_second_surname_only = True # Sólo se aplica a apellidos dobles
-
 # Filtramos los works que son journal-article
 # `None` para no usar filtro por tipo de publicación
-type = 'journal-article'
+type = ['journal-article', 'null']
 
 # True para agregar tildes a través del matcheo comparativo con las listas
 use_accent_variations = True
@@ -87,7 +92,7 @@ works_columns_to_save = [
 
     'is_retracted',
     'is_paratext',
-    
+
     'concepts.display_name:join',
 
     'alternate_host_venues.display_name',
