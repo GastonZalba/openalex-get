@@ -7,7 +7,6 @@ import requests
 import traceback
 import pandas as pd
 from datetime import datetime
-from csv import writer
 from unidecode import unidecode
 from timeit import default_timer as timer
 
@@ -81,7 +80,7 @@ def init():
 
         start = timer()
 
-        print(f'--> PROCESO INICIADO <--')
+        log(f'--> PROCESO INICIADO <--')
 
         # Abirmos la planilla de entrada
         df = pd.read_excel(io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl')
@@ -103,29 +102,23 @@ def init():
 
             # para evaluar si hay que continuar procesando el último archivo o hacer uno nuevo
             continue_prompt = getContinuePrompt()
-                    
+    
             continue_from_last_file = True if continue_prompt.lower() == 'y' else False
+            
+            if continue_from_last_file == True:        
+                       
+                with open(file_to_continue, "rb") as f:
+                    file_ = io.BytesIO(f.read())
 
-            if continue_from_last_file == True:
-        
-                file_to_continue = get_last_file()
+                df_prev = pd.read_excel(file_, sheet_name=params_sheet, engine='openpyxl')
+                process_number = df_prev['Procesamiento número'].iloc[-1]
 
-                if file_to_continue:
-                    
-                    with open(file_to_continue, "rb") as f:
-                        file_ = io.BytesIO(f.read())
+                # Establecemos el valor de comienzo del loop para que continúe desde el último elemento
+                init_row_in = df_prev['Último elemento'].iloc[-1]
+                append_existing_results = True
 
-                    df_prev = pd.read_excel(file_, sheet_name=params_sheet, engine='openpyxl')
-                    process_number = df_prev['Procesamiento número'].iloc[-1]
-
-                    # Establecemos el valor de comienzo del loop para que continúe desde el último elemento
-                    init_row_in = df_prev['Último elemento'].iloc[-1]
-                    append_existing_results = True
-
-                    print('Procesamiento se continúa desde el autor número', init_row_in )
-
-                else:
-                    print('ATENCIÓN: no se encontró archivo para continuar búsqueda')
+                log(f'-> Procesamiento se continúa desde el autor número {init_row_in}')
+                
         
         def getNumberPrompt():
             prompt = input('¿Cuántas filas querés buscar? (1-400): ')
@@ -136,6 +129,7 @@ def init():
             return int(prompt)
 
         limit_results = getNumberPrompt()
+        print(f'-> Buscando {limit_results} filas')
 
         # loopeamos por cada fila de la planilla
         for i in range(init_row_in, len(df)):
@@ -146,16 +140,16 @@ def init():
 
             author = df.iloc[i][file_input['author_column_number']]
 
-            print('Búsqueda número', i + 1)
+            log(f'Búsqueda número {i + 1}')
 
-            print('Buscando...', author)
+            log(f'Buscando... {author}')
 
             # Primero buscamos el nombre del autor en la api
             author_results = get_author_from_api(author)
 
             count_author_results = author_results['meta']['count']
 
-            print('-> Autores matcheados para el autor', author, count_author_results)
+            log(f'-> Autores matcheados para el autor {author}: {count_author_results}')
 
             # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
             # y continuamos con el siguiente autor
@@ -164,17 +158,17 @@ def init():
             else:
                 works_count = search_author(author_results, main_search['limit_authors_results'], i, df)
 
-            print('-> Works encontrados en primer instancia', works_count)
+            log(f'-> Works encontrados en primer instancia {works_count}')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
             if works_count == None or works_count <= secondary_search['min']:
-                print('-> Realizando búsqueda ampliada...', author)
+                log(f'-> Realizando búsqueda ampliada... {author}')
                 
                 # Búsqueda secundaria
                 author_results = get_author_from_api(author, search = 'secondary')
                 works_count = search_author(author_results, secondary_search['limit_authors_result'], i, df)
                 
-                print('-> Works encontrados en segunda instancia', works_count)
+                log(f'-> Works encontrados en segunda instancia {works_count}')
 
             if works_count == None:
                 res_authors_not_found.append(author)
@@ -184,12 +178,12 @@ def init():
             if works_count == 0:
                 res_authors_no_works.append(author)
 
-        print(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
+        log(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
 
     except Exception as error:
-        print(error)
-        print(traceback.format_exc())
-        print('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+        log(error)
+        log(traceback.format_exc())
+        log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
 
     finally:
         end = timer()
@@ -214,12 +208,12 @@ def showStats():
     '''
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
     '''
-    print(f'Autores encontrados: {count_authors}')
-    print(f'Trabajos encontrados: {len(res_works_output)}')
-    print(f'Autores no encontrados: {len(res_authors_not_found)}')
-    print(f'Autores sin trabajos: {len(res_authors_no_works)}')
-    print(f'Peticiones a la API: {count_request}')
-    print(f'Tiempo transcurrido (segundos): {elapsed_time}')
+    log(f'Autores encontrados: {count_authors}')
+    log(f'Trabajos encontrados: {len(res_works_output)}')
+    log(f'Autores no encontrados: {len(res_authors_not_found)}')
+    log(f'Autores sin trabajos: {len(res_authors_no_works)}')
+    log(f'Peticiones a la API: {count_request}')
+    log(f'Tiempo transcurrido (segundos): {elapsed_time}')
 
 
 def writeResults():
@@ -248,7 +242,7 @@ def writeResults():
     # Creamos archivo xls con resultados
     writer = pd.ExcelWriter(tmp_filename)
     
-    print('Escribiendo archivo...')
+    log('Escribiendo archivo...')
 
     # Escribimos hojas
     writeSheet(res_works_output, 'Works')
@@ -279,18 +273,29 @@ def writeResults():
 
     # Renombramos temporal
     date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-    os.rename(tmp_filename, f"{file_output['folder_name']}/{file_output['name']}-{date}.xlsx")
+    file_name = f"{file_output['folder_name']}/{file_output['name']}-{date}.xlsx"
+    os.rename(tmp_filename, file_name)
 
-    print('--> Archivo creado con éxito <--')
+    log(f'--> Archivo creado {file_name} <--')
+
+
+def log(arg):
+    '''
+    Print que además crea un archivo log si está activado
+    '''
+    print(arg)
+
+    if use_log == True:
+        with open("log.txt", "a", encoding="utf-8") as file:
+            date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+            file.write( f'{date} {arg}\n')
 
 
 def search_author(author_results, limit_authors_results, i, df):
-    
-    global last_row
-
     '''
     Devuelve la cantidad de trabajos encontrados del autor según los filtros establecidos
     '''
+    global last_row
 
     # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
     filtered_works_count = 0
@@ -344,7 +349,7 @@ def search_author(author_results, limit_authors_results, i, df):
                             if inst['country_code'] in filter_country_code:
                                 valid_country = True
                 except Exception as error:
-                    print(error)
+                    log(error)
                     pass
         
         if valid_country == False:
@@ -354,8 +359,7 @@ def search_author(author_results, limit_authors_results, i, df):
             filtered_works_count = count_works_results
             total_works_count_from_author += filtered_works_count
 
-        print('--> Autor encontrado', author_name,
-                author_id, f'Score: {relevance_score}')
+        log(f'--> Autor encontrado {author_name} - {author_id} - Score: {relevance_score}')
 
         authors_variations += 1
 
@@ -468,7 +472,7 @@ def getValues(cols, api_columns_values, results, join=False, num=''):
             results[f'{name}'] = value
 
 
-def get_author_from_api(author, search = 'main'):
+def get_author_from_api(author, search_type = 'main'):
 
     global count_request
 
@@ -495,10 +499,9 @@ def get_author_from_api(author, search = 'main'):
                     surname_no_accents = s[1]
 
                     if surname_no_accents.lower() == original_surname.lower():
-                        modified_string = surname_with_accents
-                
-            accented_strings.append(modified_string)
-
+                        modified_string = surname_with_accents                
+                    
+                accented_strings.append(modified_string)
 
             for original_name in name.split(' '): 
                 
@@ -513,7 +516,7 @@ def get_author_from_api(author, search = 'main'):
                     if name_no_accents.lower() == original_name.lower():
                         modified_string = name_with_accents
 
-            accented_strings.append(modified_string)
+                accented_strings.append(modified_string)
 
             accented_strings = ' '.join(accented_strings)
 
@@ -543,7 +546,7 @@ def get_author_from_api(author, search = 'main'):
         first_name = names_list[0]
         second_name = names_list[1] if len(names_list) > 1 else None
 
-        if search == 'main':
+        if search_type == 'main':
 
             if main_search['use_fullname'] == True:
                 createAccentVariation(surname, names)
@@ -608,7 +611,7 @@ def get_author_from_api(author, search = 'main'):
         PER_PAGE: PER_PAGE_VALUE
     }
 
-    print(params[FILTER])
+    log(f'Parámetros de búsqueda: {params[FILTER]}')
 
     url = API_URL + '/authors'
 
@@ -653,7 +656,7 @@ def get_works_from_api(author_id, page = 1):
 
     count_request += 1
 
-    print(f'Obteniendo trabajos del autor {author_id}, página', page)
+    log(f'Obteniendo trabajos del autor {author_id}, página {page}')
 
     if data['meta']['count'] > PER_PAGE_VALUE * page:        
         new_page = get_works_from_api(author_id, page + 1)    

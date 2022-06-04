@@ -113,3 +113,6 @@ works_columns_to_save = [
     'authorships.author.display_name',
     'authorships.institutions.country_code',
 ]
+
+
+use_log = True

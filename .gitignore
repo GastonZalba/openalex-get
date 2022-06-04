@@ -2,3 +2,4 @@
 __pycache__
 *.xlsx
 extract_surnames
+log.txt
