@@ -117,7 +117,7 @@ def init():
                 init_row_in = df_prev['Último elemento'].iloc[-1]
                 append_existing_results = True
 
-                log(f'-> Procesamiento se continúa desde el autor número {init_row_in}')
+                log(f'-> Procesamiento continúa desde archivo exitente, fila número {init_row_in}')
                 
         
         def getNumberPrompt():
@@ -208,13 +208,14 @@ def showStats():
     '''
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
     '''
+    log(f'-----------------------------------')
     log(f'Autores encontrados: {count_authors}')
     log(f'Trabajos encontrados: {len(res_works_output)}')
     log(f'Autores no encontrados: {len(res_authors_not_found)}')
     log(f'Autores sin trabajos: {len(res_authors_no_works)}')
     log(f'Peticiones a la API: {count_request}')
     log(f'Tiempo transcurrido (segundos): {elapsed_time}')
-
+    log(f'-----------------------------------')
 
 def writeResults():
     '''
@@ -330,8 +331,9 @@ def search_author(author_results, limit_authors_results, i, df):
             if valid_country == False or valid_country == None:
                 continue
             
-            # if relevance_score is None or relevance_score < min_relevance_score:
-            #     continue
+            if min_score_relevance is not None:
+                if relevance_score is None or relevance_score < min_score_relevance:
+                    continue
 
         # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
         author_id = author_found['id'].rsplit('/', 1)[-1]

@@ -40,7 +40,9 @@ secondary_search = {
     "use_second_surname_only": True  # Sólo se aplica a apellidos dobles
 }
 
-min_score_relevance = 100
+# Usar None para deshabilitar este filtrado
+# Si se habilita, resultados que estén por debajo de eeste valor no serán tomados en cuenta
+min_score_relevance = None
 
 # None para no usar este filtro
 # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
@@ -114,5 +116,6 @@ works_columns_to_save = [
     'authorships.institutions.country_code',
 ]
 
-
+# Para crear archivo txt donde se guardan todos los mensajes producidos por el script
+# Útil para debuggear código
 use_log = True
