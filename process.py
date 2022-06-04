@@ -74,6 +74,8 @@ append_existing_results = False
 
 def init():
 
+    on_error = False
+
     try:
 
         global start, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue
@@ -165,7 +167,7 @@ def init():
                 log(f'-> Realizando búsqueda ampliada... {author}')
                 
                 # Búsqueda secundaria
-                author_results = get_author_from_api(author, search = 'secondary')
+                author_results = get_author_from_api(author, search_type = 'secondary')
                 works_count = search_author(author_results, secondary_search['limit_authors_result'], i, df)
                 
                 log(f'-> Works encontrados en segunda instancia {works_count}')
@@ -183,13 +185,17 @@ def init():
     except Exception as error:
         log(error)
         log(traceback.format_exc())
-        log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+        on_error = True
 
     finally:
         end = timer()
         elapsed_time = round(end - start)
         showStats()
         writeResults()
+        
+        if on_error == True:
+            log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+
 
 
 def get_last_file():
