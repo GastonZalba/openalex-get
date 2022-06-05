@@ -8,7 +8,7 @@ file_input = {
     # columna donde está guardado apellido y nombre de los autores (comienza en 0)
     "author_column_number": 0,
 
-    # número de hoja donde se encuentran los nombres de los autores (comeinza en 0)
+    # número de hoja donde se encuentran los nombres de los autores (comienza en 0)
     "sheet_number": 1
 }
 
@@ -22,35 +22,43 @@ file_output = {
 
 main_search = {
     "limit_authors_results": 2,  # Cantidad de variaciones a guardar
-    "use_first_name_only": True,
-    "use_first_name_initial_second_name": True,
-    "use_fullname": True
+    "use_fullname": True, # Buscar con el nombre completo
+    "use_first_name_initial_second_name": True, # Buscar con el primer nombre y la inicial del segundo
+    "use_first_name_only": True # Buscar solo con el primer nombre    
 }
 
 # Búsqueda que se realiza si la primera no devuelve X cantidad de resultados
 secondary_search = {
-    "min": 10,  # Cantidad a partir de la cual se realiza una busqueda ampliada
+    "min": 10,  # Cantidad de works hallados en la búsqueda principal hasta la cual se realiza la búsueda secundaria
     "limit_authors_result": 1,  # Cantidad de variaciones a guardar
-    "use_first_name_only": True,
-    "use_first_name_initial_second_name": True,
-    "use_fullname": True,
+    "use_fullname": True, # Buscar con el nombre completo
+    "use_first_name_initial_second_name": True, # Buscar con el primer nombre y la inicial del segundo
+    "use_first_name_only": True, # Buscar solo con el primer nombre    
     "use_initials_name_only": True,  # Para autores que firman solo con las iniciales
-    "use_second_name_only": True,  # Para autores que sólo usan su segundo nombre
-    "use_first_surname_only": True,  # Sólo se aplica a apellidos dobles
-    "use_second_surname_only": True  # Sólo se aplica a apellidos dobles
+    "use_second_name_only": True,  # Buscar sólo el segundo nombre
+    "use_first_surname_only": True,  # Buscar sólo el primer apellido (solo se aplica a apellidos dobles)
+    "use_second_surname_only": True  # Buscar sólo el segundo apellido (solo se aplica a apellidos dobles)
 }
 
-# Usar None para deshabilitar este filtrado
-# Si se habilita, resultados que estén por debajo de eeste valor no serán tomados en cuenta
+# Si se habilita, resultados que estén por debajo de este valor no serán tomados en cuenta
+# y también se descartarán aquellos valores que no contengan ningún valor
+# Ej: `500`. `None` para deshabilitar
 min_score_relevance = None
 
-# None para no usar este filtro
-# Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
-# El valor debe ser una lista, y se puede incluir más de un valor
-filter_country_code = ['AR']
+country_filter = {
+    # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
+    # y luego el valor de todos los trabajos encontrados de ese autor 
+    # Ej.: ['AR', 'CA']. `None` para deshabilitar
+    "country_code": ['AR'],
+
+    # Para descartar o mantener los valores vacíos
+    # En caso de que se preserven, estos se crearán en una hoja separada
+    # `True` or `False`
+    "preserve_null": True
+}
 
 # Filtramos los works que son journal-article
-# `None` para no usar filtro por tipo de publicación
+# Ej.: `['journal-article', 'null']`. `None` para deshabilitar
 type = ['journal-article', 'null']
 
 # True para agregar tildes a través del matcheo comparativo con las listas
@@ -118,4 +126,5 @@ works_columns_to_save = [
 
 # Para crear archivo txt donde se guardan todos los mensajes producidos por el script
 # Útil para debuggear código
+# `True` o `False`
 use_log = True

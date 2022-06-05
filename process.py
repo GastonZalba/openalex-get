@@ -10,6 +10,7 @@ from datetime import datetime
 from unidecode import unidecode
 from timeit import default_timer as timer
 
+# importamos los parámetros del script
 from params import *
 
 names_variation_list = []
@@ -71,6 +72,9 @@ file_to_continue = None
 params_sheet = 'Params'
 
 append_existing_results = False
+
+# Almacena los id de authores ya encontrados (para prevenir duplicados)
+author_ids = []
 
 def init():
 
@@ -156,28 +160,28 @@ def init():
             # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
             # y continuamos con el siguiente autor
             if count_author_results == 0:        
-                works_count = None
+                works_count_1 = None
             else:
-                works_count = search_author(author_results, main_search['limit_authors_results'], i, df)
+                works_count_1 = search_author(author_results, main_search['limit_authors_results'], i, df)
 
-            log(f'-> Works encontrados en primer instancia {works_count}')
+            log(f'-> Works encontrados en primera instancia {works_count_1}')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
-            if works_count == None or works_count <= secondary_search['min']:
+            if works_count_1 == None or works_count_1 <= secondary_search['min']:
                 log(f'-> Realizando búsqueda ampliada... {author}')
                 
                 # Búsqueda secundaria
                 author_results = get_author_from_api(author, search_type = 'secondary')
-                works_count = search_author(author_results, secondary_search['limit_authors_result'], i, df)
+                works_count_2 = search_author(author_results, secondary_search['limit_authors_result'], i, df)
                 
-                log(f'-> Works encontrados en segunda instancia {works_count}')
+                log(f'-> Works encontrados en segunda instancia {works_count_2}')
 
-            if works_count == None:
+            if works_count_1 == None and works_count_2 == None:
                 res_authors_not_found.append(author)
             else:
                 count_authors += 1
 
-            if works_count == 0:
+            if works_count_1 == 0 and works_count_2 == 0: 
                 res_authors_no_works.append(author)
 
         log(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
@@ -192,7 +196,7 @@ def init():
         elapsed_time = round(end - start)
         showStats()
         writeResults()
-        
+
         if on_error == True:
             log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
 
@@ -280,7 +284,7 @@ def writeResults():
 
     # Renombramos temporal
     date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-    file_name = f"{file_output['folder_name']}/{file_output['name']}-{date}.xlsx"
+    file_name = f"{file_output['folder_name']}/{file_output['name']} ({date}).xlsx"
     os.rename(tmp_filename, file_name)
 
     log(f'--> Archivo creado {file_name} <--')
@@ -302,7 +306,7 @@ def search_author(author_results, limit_authors_results, i, df):
     '''
     Devuelve la cantidad de trabajos encontrados del autor según los filtros establecidos
     '''
-    global last_row
+    global last_row, author_ids
 
     # Revisamos que al menos una de las "variantes" encontradas del autor tenga un trabajo
     filtered_works_count = 0
@@ -312,57 +316,63 @@ def search_author(author_results, limit_authors_results, i, df):
     authors_variations = 0
 
     # Por cada autor encontrado buscamos sus trabajos
-    for author_found in author_results['results']:
-        valid_country = False
+    for author_found in author_results['results']: 
+
+        valid_country = False if country_filter['country_code'] is not None else True
 
         if authors_variations >= limit_authors_results:
             break
 
         # Si está seteado el filtro, sólo nos quedamos con los autores de un determinado país
-        if filter_country_code is not None:
+        if country_filter['country_code'] is not None:
 
             if author_found['last_known_institution'] is None:
                 valid_country = None
             else:
                 # Si el autor no es de este país, continuamos
-                if author_found['last_known_institution']['country_code'] in filter_country_code:
+                if author_found['last_known_institution']['country_code'] in country_filter['country_code']:
                     valid_country = True
 
         author_name = author_found['display_name']
         relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
-        
-        # Si ya se encontró un author, nos ponemos más estrictos para incluir un segundo resultado
-        if authors_variations > 0:
-            
-            if valid_country == False or valid_country == None:
+                           
+        if min_score_relevance is not None:
+            if relevance_score is None or relevance_score < min_score_relevance:
                 continue
-            
-            if min_score_relevance is not None:
-                if relevance_score is None or relevance_score < min_score_relevance:
-                    continue
-
+        
         # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
         author_id = author_found['id'].rsplit('/', 1)[-1]
+
+        # si este autor ya fue guardado lo salteamos
+        if author_id in author_ids:
+            continue
+
+        author_ids.append(author_id)
 
         works_results = get_works_from_api(author_id)
         count_works_results = works_results['meta']['count']
         
         # check country
-        if valid_country == False or valid_country is None:
-            for workFound in works_results['results']:
-                try:
-                    for autorship in workFound['authorships']:
-                        for inst in autorship['institutions']:
-                            # Si un autorship de un trabajo es coincidente, lo tomamos como válido
-                            if inst['country_code'] in filter_country_code:
-                                valid_country = True
-                except Exception as error:
-                    log(error)
-                    pass
-        
-        if valid_country == False:
-            continue
-        
+        if country_filter['country_code'] is not None:
+            if valid_country == False or valid_country is None:
+                for workFound in works_results['results']:
+                    try:
+                        for autorship in workFound['authorships']:
+                            for inst in autorship['institutions']:
+                                # Si un autorship de un trabajo es coincidente, lo tomamos como válido
+                                if inst['country_code'] in country_filter['country_code']:
+                                    valid_country = True
+                    except Exception as error:
+                        log(error)
+                        pass
+            
+            if valid_country == False:
+                continue
+
+            if country_filter['preserve_null'] != True:
+                if valid_country == None:
+                    continue
+
         if count_works_results != 0:
             filtered_works_count = count_works_results
             total_works_count_from_author += filtered_works_count
@@ -487,8 +497,6 @@ def get_author_from_api(author, search_type = 'main'):
     search = []
 
     def createAccentVariation(surname, name):
-        def has_accents(s):
-            return re.search(r'[àáâãäåèéêëìíîïòóôõöùúûü]+', s, flags=re.IGNORECASE)
 
         if use_accent_variations == False:
             search.append(f'{surname} {name}')
@@ -681,4 +689,7 @@ def remove_accents(input_str):
     new = re.sub(r'[ùúûü]', 'u', new)
     return new
 
+def has_accents(s):
+    return re.search(r'[àáâãäåèéêëìíîïòóôõöùúûü]+', s, flags=re.IGNORECASE)
+    
 init()
