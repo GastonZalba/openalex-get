@@ -64,7 +64,11 @@ type = ['journal-article', 'null']
 # True para agregar tildes a través del matcheo comparativo con las listas
 use_accent_variations = True
 
-# Columnas que serán guardadas
+# Columnas a guardar
+# Cada "." supone guardar el campo que está dentro de otro de mayor jerarquía.
+# Cuando el campo que se quiere guardar es una lista/array de valores, se puede agregar `:join` para guardar
+# todos los resultados en una sola celda, separados por coma. De otro modo se guardará cada uno 
+# en una columna nueva, identificado cada iteración con (1), (2), etc.
 works_columns_to_save = [
 
     'id',
@@ -112,11 +116,11 @@ works_columns_to_save = [
     'alternate_host_venues.version',
     'alternate_host_venues.license',
 
-    # 'referenced_works'
-    # 'related_works'
-    # 'abstract_inverted_index'
-    # 'cited_by_api_url'
-    # 'counts_by_years'
+    # 'referenced_works',
+    # 'related_works',
+    # 'abstract_inverted_index',
+    # 'cited_by_api_url',
+    # 'counts_by_years',
 
     'updated_date',
 

@@ -98,16 +98,16 @@ def init():
 
         if file_to_continue != None:
 
-            def getContinuePrompt():
+            def get_continue_prompt():
                 prompt = input('¿Querés continuar trabajando con el último archivo? (Y or N): ')
                 
                 if prompt.lower() != 'y' and prompt.lower() != 'n':
-                    prompt = getContinuePrompt()
+                    prompt = get_continue_prompt()
 
                 return prompt
 
             # para evaluar si hay que continuar procesando el último archivo o hacer uno nuevo
-            continue_prompt = getContinuePrompt()
+            continue_prompt = get_continue_prompt()
     
             continue_from_last_file = True if continue_prompt.lower() == 'y' else False
             
@@ -126,15 +126,15 @@ def init():
                 log(f'-> Procesamiento continúa desde archivo exitente, fila número {init_row_in}')
                 
         
-        def getNumberPrompt():
+        def get_number_prompt():
             prompt = input('¿Cuántas filas querés buscar? (1-400): ')
             
             if not prompt.isdigit():
-                prompt = getNumberPrompt()
+                prompt = get_number_prompt()
 
             return int(prompt)
 
-        limit_results = getNumberPrompt()
+        limit_results = get_number_prompt()
         print(f'-> Buscando {limit_results} filas')
 
         # loopeamos por cada fila de la planilla
@@ -145,10 +145,9 @@ def init():
                 break
 
             author = df.iloc[i][file_input['author_column_number']]
-
-            log(f'Búsqueda número {i + 1}')
-
-            log(f'Buscando... {author}')
+            
+            log('\n')
+            log(f'BÚSQUEDA NÚMERO {i + 1} - {author}')
 
             # Primero buscamos el nombre del autor en la api
             author_results = get_author_from_api(author)
@@ -164,7 +163,7 @@ def init():
             else:
                 works_count_1 = search_author(author_results, main_search['limit_authors_results'], i, df)
 
-            log(f'-> Works encontrados en primera instancia {works_count_1}')
+            log(f'-> {works_count_1} works encontrados en primera instancia')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
             if works_count_1 == None or works_count_1 <= secondary_search['min']:
@@ -174,7 +173,7 @@ def init():
                 author_results = get_author_from_api(author, search_type = 'secondary')
                 works_count_2 = search_author(author_results, secondary_search['limit_authors_result'], i, df)
                 
-                log(f'-> Works encontrados en segunda instancia {works_count_2}')
+                log(f'-> {works_count_2} works encontrados en segunda instancia')
 
             if works_count_1 == None and works_count_2 == None:
                 res_authors_not_found.append(author)
@@ -184,6 +183,7 @@ def init():
             if works_count_1 == 0 and works_count_2 == 0: 
                 res_authors_no_works.append(author)
 
+        log('\n')
         log(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
 
     except Exception as error:
@@ -194,8 +194,8 @@ def init():
     finally:
         end = timer()
         elapsed_time = round(end - start)
-        showStats()
-        writeResults()
+        show_stats()
+        write_results()
 
         if on_error == True:
             log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
@@ -203,6 +203,9 @@ def init():
 
 
 def get_last_file():
+    '''
+    Obtiene el último archivo creado para poder continuar la ejecución
+    '''
     last_file = None
 
     # obtenemos todos los archivos creados
@@ -214,7 +217,7 @@ def get_last_file():
 
     return last_file
 
-def showStats():
+def show_stats():
     '''
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
     '''
@@ -227,12 +230,58 @@ def showStats():
     log(f'Tiempo transcurrido (segundos): {elapsed_time}')
     log(f'-----------------------------------')
 
-def writeResults():
+def write_results():
     '''
     Guardamos los resultados en un archivo Excel
     '''
+    def order_columns(df):
+        '''
+        Ordenamos las columnas para que aquellas que se crean dinámicamente desde arrays
+        queden todas juntas
+        '''
+        cols = df.columns.tolist()
 
-    def writeSheet(results, sheet_name, header=True, index=False):
+        new_order = []
+        new_order_2 = []
+
+        # Primero ordenamos los array dentro de cada columna
+        for col in cols:
+            # Buscamos aquellas columnas creadas desde un array
+            match = re.findall('(\([0-9]*\))', col)
+            if match:
+                for m in match:
+                    # Obtenemos el nombre original de esa columna y buscamos todas sus variantes
+                    col_name_trim = col.split(m)[0].strip()
+                    col_first_part = f'{col_name_trim} {m}'
+                    for _col in cols:
+                        if col_first_part in _col:  
+                            if _col in new_order:
+                                continue                      
+                            new_order.append(_col)
+            else:
+                if col in new_order:
+                    continue
+                new_order.append(col)
+
+        # Por último juntamos todas las columnas que se llaman igual
+        for col in new_order:
+            if '(1)' in col:
+                col_name_trim = col.split('(1)')[0].strip()
+                for _col in new_order:
+                    if col_name_trim in _col:  
+                        if _col in new_order_2:
+                            continue                      
+                        new_order_2.append(_col)
+            else:
+                if col in new_order_2:
+                    continue
+                new_order_2.append(col)
+
+
+        df = df[new_order_2]
+        return df
+
+    def write_sheet(results, sheet_name, header=True, index=False):
         
         df = pd.DataFrame(results)
 
@@ -243,6 +292,9 @@ def writeResults():
 
             df_prev = pd.read_excel(file_io_obj, sheet_name=sheet_name, engine='openpyxl')
             df = pd.concat([df_prev, df], axis=0)
+
+        
+        df = order_columns(df)
 
         df.to_excel(
             writer, sheet_name=sheet_name, header=header, index=index
@@ -256,10 +308,10 @@ def writeResults():
     log('Escribiendo archivo...')
 
     # Escribimos hojas
-    writeSheet(res_works_output, 'Works')
-    writeSheet(res_works_no_country_output, 'Works sin coincidencia de país')
-    writeSheet({'Listado': res_authors_not_found}, 'Autores no encontrados')
-    writeSheet({'Listado': res_authors_no_works}, 'Autores sin works')
+    write_sheet(res_works_output, 'Works')
+    write_sheet(res_works_no_country_output, 'Works sin coincidencia de país')
+    write_sheet({'Listado': res_authors_not_found}, 'Autores no encontrados')
+    write_sheet({'Listado': res_authors_no_works}, 'Autores sin works')
 
     # Guardamos valores del procesamiento
     params = {
@@ -273,7 +325,7 @@ def writeResults():
         'Último elemento': last_row
     }
 
-    writeSheet(pd.DataFrame(params, index=[0]), params_sheet)
+    write_sheet(pd.DataFrame(params, index=[0]), params_sheet)
 
     # Guardamos xls
     writer.close()
@@ -284,11 +336,13 @@ def writeResults():
 
     # Renombramos temporal
     date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-    file_name = f"{file_output['folder_name']}/{file_output['name']} ({date}).xlsx"
-    os.rename(tmp_filename, file_name)
+    file_name = f"{file_output['folder_name']}/{file_output['name']} ({date})"
+    os.rename(tmp_filename, file_name + '.xlsx')
 
     log(f'--> Archivo creado {file_name} <--')
 
+    if use_log:
+       os.rename('log.txt', file_name + '_log.txt')
 
 def log(arg):
     '''
@@ -299,7 +353,11 @@ def log(arg):
     if use_log == True:
         with open("log.txt", "a", encoding="utf-8") as file:
             date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-            file.write( f'{date} {arg}\n')
+            if arg == '\n':
+                file.write(arg)
+            else:
+                file.write( f'{date} {arg}\n')
+
 
 
 def search_author(author_results, limit_authors_results, i, df):
@@ -377,7 +435,7 @@ def search_author(author_results, limit_authors_results, i, df):
             filtered_works_count = count_works_results
             total_works_count_from_author += filtered_works_count
 
-        log(f'--> Autor encontrado {author_name} - {author_id} - Score: {relevance_score}')
+        log(f'---> {count_works_results} trabajos encontrados para autor {author_name} - {author_id} - Score: {relevance_score}')
 
         authors_variations += 1
 
@@ -398,20 +456,10 @@ def search_author(author_results, limit_authors_results, i, df):
             results['relevance_score'] = relevance_score
 
             for column_to_save in works_columns_to_save:
-
-                # chequeamos si la columna está seteada para hacer un join de valores
-                j = column_to_save.split(':join')
-
-                column_to_save = j[0]
-
-                join = True if len(j) > 1 else False
-
+      
                 subcolumns_list = column_to_save.split('.')
 
-                api_column_values = workFounds[subcolumns_list[0]]
-
-                getValues(subcolumns_list,
-                            api_column_values, results, join)
+                parse_column_values(subcolumns_list, workFounds, results)
 
             if valid_country == None:
                 res_works_no_country_output.append(results)
@@ -421,73 +469,67 @@ def search_author(author_results, limit_authors_results, i, df):
     return total_works_count_from_author
     
 
-def getValues(cols, api_columns_values, results, join=False, num=''):
 
-    name = ''
+def parse_column_values(cols, api_values, results, num='', name=''):
+    '''
+    Transforma los valores devueltos por la api según
+    las columnas especificadas que dedan guardarse
+    '''
+        
+    value = ''
 
-    if join == True:
+    # cuando hay un array, agregamos el número identificador del elemento
+    _num = f' ({num}) ' if num != '' else ' '
+    
+    col_name = f'{name}{_num}'
 
-        # por si acaso, revisamos que el valor devuelto por la api sea efectivamente un array
-        api_columns_values = api_columns_values if isinstance(
-            api_columns_values, list) else [api_columns_values]
+    value = api_values
+    skip = False
 
-        l = []
+    for i in range(len(cols)):             
+        try:
 
-        for a in api_columns_values:
+            if isinstance(value, list):
+                join = True if len(cols[i].split(':join')) > 1 else False
 
-            name = cols[0].upper()
+                if join:
+                    col = cols[i].split(':join')[0]
+                    l = []
+                    for a in value:
+                        l.append(a[col])
+                    value = ', '.join(str(v) for v in l)
+                    break
+                else:
+                    skip = True
+                    next_cols = cols[(i):]
+                    next_cols = next_cols if isinstance(next_cols, list) else [next_cols]
 
-            if len(cols) == 3:
-                name += f' {cols[1]}.{cols[2]}'
-                # chequeamos que existan la columnas
-                if (cols[1] in a):
-                    l.append(a[cols[1]][cols[2]])
-            elif len(cols) == 2:
-                name += f' {cols[1]}'
-                # chequeamos que exista la columna
-                if (cols[1] in a):
-                    l.append(a[cols[1]])
-            else:
-                l.append(a)
-
-        results[f'{name}'] = ', '.join(str(v) for v in l)
-
-    else:
-        if isinstance(api_columns_values, list):
-            for i, val in enumerate(api_columns_values):
-                getValues(cols, val, results, join=False, num=i+1)
-
-        else:
-
-            value = ''
-            name += cols[0].upper()
-
-            # cuando hay un array, agregamos el número identificador del elemento
-            _num = f' ({num}) ' if num != '' else ' '
-
-            if len(cols) == 3:
-                # chequeamos que existan la columnas
-                if (cols[1] in api_columns_values):
-                    name += f' {cols[1]}{_num}{cols[2]}'
-                    parent = api_columns_values[cols[1]]
-
-                    # Si es una lista, loopeamos esos elementos
-                    if isinstance(parent, list):
-                        for i, val in enumerate(parent):
-                            value = parent[i][cols[2]]
-                            results[f'{name} ({i+1})'] = value
+                    prev_cols = cols[:(i)]
+                    prev_cols = prev_cols if isinstance(prev_cols, list) else [prev_cols]
+                    
+                    for i, val in enumerate(value):
+                        col_ = f'{col_name}{".".join(prev_cols)}'
+                        parse_column_values(next_cols, val, results, num=i+1, name=col_)
                         return
-                    else:
-                        value = parent[cols[2]]
-            elif len(cols) == 2:
-                name += f'{_num}{cols[1]}'
-                # chequeamos que exista la columna
-                if (cols[1] in api_columns_values):
-                    value = api_columns_values[cols[1]]
             else:
-                value = api_columns_values
+                col = cols[i]
+                # ingresamos a cada subatributo
+                if col == '':
+                    value = value
+                else:
+                    if col in value:
+                        value = value[col]
+                    else:
+                        break
 
-            results[f'{name}'] = value
+        except Exception as error:
+            print('ERROR', error)
+            print(traceback.format_exc())
+            continue
+    
+    if skip != True:
+        col_name += f'{".".join(cols)}'
+        results[f'{col_name}'] = value
 
 
 def get_author_from_api(author, search_type = 'main'):
@@ -496,7 +538,7 @@ def get_author_from_api(author, search_type = 'main'):
 
     search = []
 
-    def createAccentVariation(surname, name):
+    def create_accent_variation(surname, name):
 
         if use_accent_variations == False:
             search.append(f'{surname} {name}')
@@ -565,29 +607,29 @@ def get_author_from_api(author, search_type = 'main'):
         if search_type == 'main':
 
             if main_search['use_fullname'] == True:
-                createAccentVariation(surname, names)
+                create_accent_variation(surname, names)
         
             if main_search['use_first_name_initial_second_name'] and second_name is not None:
                 nn = f'{first_name} {second_name[0]}'
-                createAccentVariation(surname, nn)
+                create_accent_variation(surname, nn)
 
             if main_search['use_first_name_only'] and second_name is not None:
                 # Sólo buscamos por apellido y primer nombre
-                createAccentVariation(surname, first_name)
+                create_accent_variation(surname, first_name)
             
         else:
 
             if secondary_search['use_second_name_only'] == True and second_name is not None:
                 # Sólo buscamos por apellido y segundo nombre
-                createAccentVariation(surname, second_name)
+                create_accent_variation(surname, second_name)
             
             if secondary_search['use_initials_name_only'] == True:
                 # Sólo buscamos por apellido e iniciales
                 if second_name is not None:
                     nn = f'{first_name[0]} {second_name[0]}'
-                    createAccentVariation(surname, nn)
+                    create_accent_variation(surname, nn)
                 else:
-                    createAccentVariation(surname, first_name[0])
+                    create_accent_variation(surname, first_name[0])
 
             surname_list = surname.split(' ')
             
@@ -595,15 +637,15 @@ def get_author_from_api(author, search_type = 'main'):
                 if secondary_search['use_first_surname_only'] == True:
 
                     if secondary_search['use_fullname'] == True:
-                        createAccentVariation(surname_list[0], names)
+                        create_accent_variation(surname_list[0], names)
                 
                     if secondary_search['use_first_name_initial_second_name'] == True and second_name is not None:
                         nn = f'{first_name} {second_name[0]}'
-                        createAccentVariation(surname_list[0], nn)
+                        create_accent_variation(surname_list[0], nn)
 
                     if secondary_search['use_first_name_only'] == True and second_name is not None:
                         # Sólo buscamos por apellido y primer nombre
-                        createAccentVariation(surname_list[0], first_name)
+                        create_accent_variation(surname_list[0], first_name)
 
                 if secondary_search['use_second_surname_only'] == True:
                     
@@ -611,15 +653,15 @@ def get_author_from_api(author, search_type = 'main'):
                     second_surname = surname_list[1] if surname_list[1].lower() != 'de' else surname_list[2]
 
                     if secondary_search['use_fullname'] == True:
-                        createAccentVariation(second_surname, names)
+                        create_accent_variation(second_surname, names)
                 
                     if secondary_search['use_first_name_initial_second_name'] == True and second_name is not None:
                         nn = f' {first_name} {second_name[0]}'
-                        createAccentVariation(second_surname, nn)
+                        create_accent_variation(second_surname, nn)
 
                     if secondary_search['use_first_name_only'] == True and second_name is not None:
                         # Sólo buscamos por apellido y primer nombre
-                        createAccentVariation(second_surname, first_name)
+                        create_accent_variation(second_surname, first_name)
 
     params = {
         FILTER: 'display_name.search:' + '|'.join(search),
@@ -672,7 +714,7 @@ def get_works_from_api(author_id, page = 1):
 
     count_request += 1
 
-    log(f'Obteniendo trabajos del autor {author_id}, página {page}')
+    log(f'--> Buscando trabajos del autor {author_id}, página {page}...')
 
     if data['meta']['count'] > PER_PAGE_VALUE * page:        
         new_page = get_works_from_api(author_id, page + 1)    
@@ -681,6 +723,9 @@ def get_works_from_api(author_id, page = 1):
     return data
 
 def remove_accents(input_str):
+    '''
+    Remueve tildes, manteniendo otros caracteres especiales como la "ñ"
+    '''
     new = input_str.lower()
     new = re.sub(r'[àáâãäå]', 'a', new)
     new = re.sub(r'[èéêë]', 'e', new)
@@ -690,6 +735,9 @@ def remove_accents(input_str):
     return new
 
 def has_accents(s):
+    '''
+    Chequea si un string tiene tildes
+    '''
     return re.search(r'[àáâãäåèéêëìíîïòóôõöùúûü]+', s, flags=re.IGNORECASE)
-    
+
 init()
