@@ -88,8 +88,8 @@ def init():
 
         log(f'--> PROCESO INICIADO <--')
 
-        # Abirmos la planilla de entrada
-        df = pd.read_excel(io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl')
+        # Abrimos la planilla de entrada
+        df_input = pd.read_excel(io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl')
         
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
@@ -124,6 +124,8 @@ def init():
                 append_existing_results = True
 
                 log(f'-> Procesamiento continúa desde archivo exitente, fila número {init_row_in}')
+
+                df_prev = None
                 
         
         def get_number_prompt():
@@ -138,13 +140,13 @@ def init():
         print(f'-> Buscando {limit_results} filas')
 
         # loopeamos por cada fila de la planilla
-        for i in range(init_row_in, len(df)):
+        for i in range(init_row_in, len(df_input)):
 
             # si no hay límite establecido se loopean por todos los valores
             if i >= limit_results + init_row_in:
                 break
 
-            author = df.iloc[i][file_input['author_column_number']]
+            author = df_input.iloc[i][file_input['author_column_number']]
             
             log('\n')
             log(f'BÚSQUEDA NÚMERO {i + 1} - {author}')
@@ -161,7 +163,7 @@ def init():
             if count_author_results == 0:        
                 works_count_1 = None
             else:
-                works_count_1 = search_author(author_results, main_search['limit_authors_results'], i, df)
+                works_count_1 = search_author(author_results, main_search['limit_authors_results'], i, df_input)
 
             log(f'-> {works_count_1} works encontrados en primera instancia')
 
@@ -171,7 +173,7 @@ def init():
                 
                 # Búsqueda secundaria
                 author_results = get_author_from_api(author, search_type = 'secondary')
-                works_count_2 = search_author(author_results, secondary_search['limit_authors_result'], i, df)
+                works_count_2 = search_author(author_results, secondary_search['limit_authors_result'], i, df_input)
                 
                 log(f'-> {works_count_2} works encontrados en segunda instancia')
 
@@ -192,6 +194,9 @@ def init():
         on_error = True
 
     finally:
+
+        df_input = None # Limpiamos de la memoria el dataframe de entrada
+        
         end = timer()
         elapsed_time = round(end - start)
         show_stats()
@@ -299,6 +304,8 @@ def write_results():
         df.to_excel(
             writer, sheet_name=sheet_name, header=header, index=index
         )
+
+        df = None
 
     tmp_filename = f"{file_output['folder_name']}/{file_output['name']}_tmp.xlsx"
 
@@ -510,7 +517,8 @@ def parse_column_values(cols, api_values, results, num='', name=''):
                     for i, val in enumerate(value):
                         col_ = f'{col_name}{".".join(prev_cols)}'
                         parse_column_values(next_cols, val, results, num=i+1, name=col_)
-                        return
+
+                    break
             else:
                 col = cols[i]
                 # ingresamos a cada subatributo
@@ -586,7 +594,7 @@ def get_author_from_api(author, search_type = 'main'):
                 search.append(search_without_accents)
         
 
-    variations = author.split('//')
+    variations = author.split('|')
 
     for variation in variations:
 

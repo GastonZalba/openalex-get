@@ -9,11 +9,23 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
     - cargar el entorno creado ejecutando `.venv\Scripts\activate`. Si tira error de ejecución de scripts en Windows, modificar [ExecutionPolicy](https://www.alexmedina.net/habilitar-la-ejecucion-de-scripts-para-powershell/) y volver a intentarlo
  - una vez cargado el entorno, ejecutar `pip install -r requirements.txt` para instalar las dependencias
 
+
+## Limitaciones (05/2022)
+- Principalmente por errores en los datos devueltos por openalex: se han visto casos de nombres de autores con errores de tipeo, incompletos, o abreviados de diferentes maneras, o incluso dos autores ingresados como uno solo. Algunos de estos errores pueden potencialmente hacer que las peticiones no devuelvan resultados si se busca el nombre completo de cada autor.
+
+- La API no normaliza valores con y sin tilde, por lo que una búsqueda con "José" no matchea con "Jose", y a la inversa. Para mitigar esto se utiliza el archivo "nombres-acento.json" y "apellidos-acento.json" que tienen un listado de nombres frecuentes que llevan tilde. Al hacer cada búsqueda, si el nombre del autor en el excel de entrada -sin tilde- matchea alguno de esos nombres, se reemplaza la palabra por su versión con tilde. Posteriormente se hace una búsqueda doble (en un solo request) de cada autor: con y sin tilde.
+
+- Existen autores que están cargados con nombre completo, otros sólo con el primer nombre, sólo con el segundo, o sólo apellido e iniciales, o sólo el primer apellido, etc. Por esta razón, cada petición que se hace tiene todas estas variaciones incorporadas (sumadas a la versión con/sin tilde). Por ejemplo, la búsqueda principal de `VILA, Alejandro Jose`, sería `Vilá Alejandro José|vila alejandro jose|Vilá Alejandro J|vila alejandro j|Vilá Alejandro|vila alejandro`. Para activar/desactivar cada una de estas variaciones, modificar el archivo [params.py](params.py).
+
+- Para autores que pueden estar cargados bajo un pseudónimo, ingresar los nombres posibles en la columna del archivo input, separados con un '|'. Ejemplo: `GOLDSCHVARTZ, Adriana Julieta | MARSHALL, Adriana`. En estos casos se buscarán ambas variaciones del mismo autor.
+
+- Como la generación de columnas es dinámica, porque hay columnas que se crean según la cantidad de elementos que hay en el array de un campo, esto implica que cada vez que se continúa un procesamiento incompleto, el script deba leer todas las filas guardadas anteriormente, combinarlas con lo nuevo, y volver a escribir todos los datos de nuevo (haciendo un ordenamiento de las columnas antes de escribir). Esto produce que al momento de guardado el script tarde bastante, y que incluso con listados muy grandes (o sistemas pequeños) pueda haber problemas de memoria. Del mismo modo, esta generación dinámica de columnas implica que no se pueda guardar fila por fila el archivo a medida que se obtienen los resultados, sino que haya que esperar a que el dataframe esté completo y ordenado.
+
 ## Uso
 - Cargar en una planilla de Excel, en una sola columna, el apellido y nombre de los autores a buscar. `Ej: Sánchez, José Carlos` (respetar la coma luego del apellido, las mayúsculas no importan).
-- Idealmente los nombres deberían contener los tildes (ver debajo las limitaciones de la api sobre el tema).
+- Idealmente los nombres deberían contener los tildes (ver las limitaciones de la api sobre el tema).
 - Si el archivo de entrada tiene más columnas con información, éstas serán agregadas en el mismo orden en el archivo de salida.
-- Configurar el archivo `params.py` para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
+- Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
 - Cargar entorno ejecutando `.venv\Scripts\activate`
 - Ejecutar `python process.py`
 - Establecer por consola si se debe continuar un archivo existente (si hay), y la cantidad de filas a evaluar
@@ -21,7 +33,7 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 ## Parámetros de búsqueda
 
 ### Columnas a guardar
-Modificar la variable `works_columns_to_save` del archivo `params.py` con las columnas deseadas.
+Modificar la variable `works_columns_to_save` del archivo [params.py](params.py) con las columnas deseadas.
 
 Cada "." supone guardar el campo que está dentro de otro de mayor jerarquía.
 Cuando el campo que se quiere guardar es una lista/array de valores, se puede agregar `:join` para guardar todos los resultados separados por comas en una sola celda. De otro modo se guardará cada uno en una columna nueva, identificado cada iteración con (1), (2), etc.
@@ -52,12 +64,3 @@ works_columns_to_save = [
     'authorships.institutions.country_code',
 ]
 ```
-
-### Limitaciones (05/2022)
-- Principalmente por errores en los datos devueltos por openalex: se han visto casos de nombres de autores con errores de tipeo, incompletos, o abreviados de diferentes maneras, o incluso dos autores ingresados como uno solo. Algunos de estos errores pueden potencialmente hacer que las peticiones no devuelvan resultados si se busca el nombre completo de cada autor. Para minimizar esto, se elimina el segundo nombre en las búsquedas desde el script, que es donde hay mayores inconsistencias en los valores cargados (esto se puede desactivar poniendo como `False` la variable `only_use_first_name`).
-
-- La API no normaliza valores con y sin tilde, por lo que una búsqueda con "José" no matchea con "Jose", y a la inversa. Para mitigar esto se utiliza el archivo "nombres-acento.json" que tiene un listado de nombres frecuentes que llevan tilde. Al hacer cada búsqueda, si el nombre del autor en el excel de entrada -sin tilde- matchea alguno de esos nombres, se reemplaza la palabra por su versión con tilde. Posteriormente se hace una búsqueda doble (en un solo request) de cada autor: con y sin tilde.
-
-## TODO
-- Actualizar README
-- Ordenar columnas
