@@ -76,13 +76,19 @@ append_existing_results = False
 # Almacena los id de authores ya encontrados (para prevenir duplicados)
 author_ids = []
 
+tmp_filename = "openalex_tmp.xlsx"
+
 def init():
 
     on_error = False
 
     try:
 
-        global start, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue
+        global start, tmp_filename, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue
+
+        # si existe un archivo temporario, lo removemos por las dudas
+        if os.path.exists(tmp_filename):
+            os.remove(tmp_filename)
 
         start = timer()
 
@@ -307,7 +313,6 @@ def write_results():
 
         df = None
 
-    tmp_filename = f"{file_output['folder_name']}/{file_output['name']}_tmp.xlsx"
 
     # Creamos archivo xls con resultados
     writer = pd.ExcelWriter(tmp_filename)
@@ -528,6 +533,7 @@ def parse_column_values(cols, api_values, results, num='', name=''):
                     if col in value:
                         value = value[col]
                     else:
+                        value = None
                         break
 
         except Exception as error:
