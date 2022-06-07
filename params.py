@@ -125,6 +125,8 @@ works_columns_to_save = [
     'updated_date',
 
     'authorships.author.display_name',
+    'authorships.author.id',
+    
     'authorships.institutions.country_code',
 ]
 

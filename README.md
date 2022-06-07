@@ -61,6 +61,10 @@ works_columns_to_save = [
 
     // Ejemplo para guardar atributos en 3 niveles de profundidad
     'authorships.author.display_name',
+    'authorships.author.id',
+    
+    // Ejemplo para guardar atributos en 3 niveles de profundidad, 
+    // y siendo uno de los de mayor jerarquía un array
     'authorships.institutions.country_code',
 ]
 ```
