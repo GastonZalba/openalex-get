@@ -472,8 +472,12 @@ def search_author(author_results, limit_authors_results, i, df):
 
             results['Autor encontrado'] = author_name
             results['Autor encontrado id'] = author_id
-            results['Código de país válido'] = valid_country
 
+            if isinstance(valid_country, bool):
+                valid_country = 0 if valid_country == False else 1           
+
+            results['Código de país válido'] = valid_country          
+           
             results['relevance_score'] = relevance_score
 
             for column_to_save in works_columns_to_save:
