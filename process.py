@@ -8,10 +8,14 @@ import traceback
 import pandas as pd
 from datetime import datetime
 from unidecode import unidecode
+from colorama import init, Fore, Style
 from timeit import default_timer as timer
 
 # importamos los parámetros del script
 from params import *
+
+# fix colorama colors in windows console
+init(convert=True)
 
 names_variation_list = []
 
@@ -93,11 +97,13 @@ def init():
 
         start = timer()
 
-        log(f'--> PROCESO INICIADO <--')
+        log(f'{Fore.GREEN}--> PROCESO INICIADO <--{Style.RESET_ALL}')
+           
+        header = (file_input['header'] - 1) if file_input['header'] is not None else None
 
         # Abrimos la planilla de entrada
         df_input = pd.read_excel(
-            io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl')
+            io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl', header=header)
 
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
@@ -139,7 +145,7 @@ def init():
                 df_prev = None
 
         def get_number_prompt():
-            prompt = input('¿Cuántas filas querés buscar? (1-400): ')
+            prompt = input('¿Cuántas filas querés buscar?: ')
 
             if not prompt.isdigit():
                 prompt = get_number_prompt()
@@ -200,11 +206,11 @@ def init():
                 res_authors_no_works.append(author)
 
         log('\n')
-        log(f'--> PROCESO TERMINADO EXITOSAMENTE <--')
+        log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
 
     except Exception as error:
-        log(error)
-        log(traceback.format_exc())
+        log(f'{Fore.RED}{error}{Style.RESET_ALL}')
+        log(f'{Fore.RED}{traceback.format_exc()}{Style.RESET_ALL}')
         on_error = True
 
     finally:
@@ -217,7 +223,7 @@ def init():
         write_results()
 
         if on_error == True:
-            log('ATENCIÓN, hubo errores en el procesamiento')  # oh no
+            log(f'{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')  # oh no
 
 
 def get_last_file():
@@ -242,10 +248,10 @@ def show_stats():
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
     '''
     log(f'-----------------------------------')
-    log(f'Autores encontrados: {count_authors}')
-    log(f'Trabajos encontrados: {len(res_works_output)}')
-    log(f'Autores no encontrados: {len(res_authors_not_found)}')
-    log(f'Autores sin trabajos: {len(res_authors_no_works)}')
+    log(f'{Fore.GREEN}Autores encontrados: {count_authors}{Style.RESET_ALL}')
+    log(f'{Fore.GREEN}Trabajos encontrados: {len(res_works_output)}{Style.RESET_ALL}')
+    log(f'{Fore.YELLOW}Autores no encontrados: {len(res_authors_not_found)}{Style.RESET_ALL}')
+    log(f'{Fore.YELLOW}Autores sin trabajos: {len(res_authors_no_works)}{Style.RESET_ALL}')
     log(f'Peticiones a la API: {count_request}')
     log(f'Tiempo transcurrido (segundos): {elapsed_time}')
     log(f'-----------------------------------')
@@ -268,14 +274,14 @@ def write_results():
         # Primero ordenamos los array dentro de cada columna
         for col in cols:
             # Buscamos aquellas columnas creadas desde un array
-            match = re.findall('(\([0-9]*\))', col)
+            match = re.findall('(\([0-9]*\))', str(col))
             if match:
                 for m in match:
                     # Obtenemos el nombre original de esa columna y buscamos todas sus variantes
                     col_name_trim = col.split(m)[0].strip()
                     col_first_part = f'{col_name_trim} {m}'
                     for _col in cols:
-                        if col_first_part in _col:
+                        if col_first_part in str(_col):
                             if _col in new_order:
                                 continue
                             new_order.append(_col)
@@ -286,10 +292,10 @@ def write_results():
 
         # Por último juntamos todas las columnas que se llaman igual
         for col in new_order:
-            if '(1)' in col:
+            if '(1)' in str(col):
                 col_name_trim = col.split('(1)')[0].strip()
                 for _col in new_order:
-                    if col_name_trim in _col:
+                    if col_name_trim in str(_col):
                         if _col in new_order_2:
                             continue
                         new_order_2.append(_col)
@@ -357,10 +363,15 @@ def write_results():
 
     # Renombramos temporal
     date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+
+    # creamos carpeta output si no existe
+    if not os.path.exists(file_output['folder_name']):
+        os.makedirs(file_output['folder_name'])
+
     file_name = f"{file_output['folder_name']}/{file_output['name']} ({date})"
     os.rename(tmp_filename, file_name + '.xlsx')
 
-    log(f'--> Archivo creado {file_name} <--')
+    log(f'{Fore.GREEN}--> Archivo creado {file_name} <--{Style.RESET_ALL}')
 
     if use_log:
         os.rename('log.txt', file_name + '_log.txt')
@@ -378,6 +389,8 @@ def log(arg):
             if arg == '\n':
                 file.write(arg)
             else:
+                # ansi scape tor emove colorama colors
+                arg = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]').sub('', arg)
                 file.write(f'{date} {arg}\n')
 
 
@@ -442,7 +455,7 @@ def search_author(author_results, limit_authors_results, i, df):
                                 if inst['country_code'] in country_filter['country_code']:
                                     valid_country = True
                     except Exception as error:
-                        log(error)
+                        log(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
                         pass
 
             if valid_country == False:
@@ -552,8 +565,8 @@ def parse_column_values(cols, api_values, results, num='', name=''):
                         break
 
         except Exception as error:
-            print('ERROR', error)
-            print(traceback.format_exc())
+            log(f'{Fore.YELLOW}Error: {error}{Style.RESET_ALL}')
+            log(f'{Fore.RED}{traceback.format_exc()}{Style.RESET_ALL}')
             continue
 
     if skip != True:

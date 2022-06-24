@@ -5,11 +5,15 @@ file_input = {
     # Configuración del Excel usado como input
     "name": 'input.xlsx',
 
+    # Número de fila que tiene la cabecera de las columnas y a partir de la cual comenzará la ejecución.
+    # Establecer en `None` si la planilla no tiene cabeceras (comienza en 1)
+    "header": 1,
+
     # columna donde está guardado apellido y nombre de los autores (comienza en 0)
     "author_column_number": 0,
 
     # número de hoja donde se encuentran los nombres de los autores (comienza en 0)
-    "sheet_number": 1
+    "sheet_number": 0
 }
 
 file_output = {

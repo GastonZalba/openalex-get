@@ -22,13 +22,15 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 - Como la generación de columnas es dinámica, porque hay columnas que se crean según la cantidad de elementos que hay en el array de un campo, esto implica que cada vez que se continúa un procesamiento incompleto, el script deba leer todas las filas guardadas anteriormente, combinarlas con lo nuevo, y volver a escribir todos los datos de nuevo (haciendo un ordenamiento de las columnas antes de escribir). Esto produce que al momento de guardado el script tarde bastante, y que incluso con listados muy grandes (o sistemas pequeños) pueda haber problemas de memoria. Del mismo modo, esta generación dinámica de columnas implica que no se pueda guardar fila por fila el archivo a medida que se obtienen los resultados, sino que haya que esperar a que el dataframe esté completo y ordenado.
 
 ## Uso
-- Cargar en una planilla de Excel, en una sola columna, el apellido y nombre de los autores a buscar. `Ej: Sánchez, José Carlos` (respetar la coma luego del apellido, las mayúsculas no importan).
+- Crear una planilla de Excel (nombre por defecto input `input.xlsx`) y colocarla en la raíz del directorio. 
+- Poner en la primer columna el apellido y nombre de los autores a buscar. `Ej: Sánchez, José Carlos` (respetar la coma luego del apellido, las mayúsculas no importan).
 - Idealmente los nombres deberían contener los tildes (ver las limitaciones de la api sobre el tema).
-- Si el archivo de entrada tiene más columnas con información, éstas serán agregadas en el mismo orden en el archivo de salida.
-- Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
+- Si el archivo de entrada tiene más columnas con información, éstas serán agregadas en el mismo orden en el archivo de salida (en estos casos es recomendable utilizar cabeceras en ela rchivo de entrada para distinguir cada una de las columnas)
+- Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), número de hoja, cabezera, salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
 - Cargar entorno ejecutando `.venv\Scripts\activate`
 - Ejecutar `python process.py`
-- Establecer por consola si se debe continuar un archivo existente (si hay), y la cantidad de filas a evaluar
+- Establecer por consola la cantidad de filas a evaluar en la ejecución
+- Si en una primera instancia no se buscan todas las filas existentes en ela rchivo de entrada, se puede retomar el trabajo en la ejecución siguiente estableciendo por consola que se desea retomar el trabajo
 
 ## Parámetros de búsqueda
 
