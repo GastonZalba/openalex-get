@@ -1,8 +1,9 @@
-import io
 import os
 import re
 import json
 import glob
+from tabnanny import verbose
+import psutil
 import requests
 import traceback
 import pandas as pd
@@ -63,13 +64,12 @@ count_authors = 0
 
 process_number = 0
 
-elapsed_time = 0
-
 last_row = 1
 
 # para saber cuánto tarda en hacerse el proceso
-start = None
-end = None
+elapsed_time = 0
+start_time = None
+end_time = None
 
 file_to_continue = None
 
@@ -82,6 +82,11 @@ author_ids = []
 
 tmp_filename = "openalex_tmp.xlsx"
 
+# Añadimos fecha al log temporal para evitar que se sobreescriba en futuras ejecuciones que terminen abruptamente
+log_time = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+tmp_log_filename = f'log_tmp_{log_time}.txt'
+
+df_prev = None
 
 def init():
 
@@ -89,21 +94,30 @@ def init():
 
     try:
 
-        global start, tmp_filename, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue
+        global start_time, tmp_filename, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue, tmp_log_filename, df_prev
+
 
         # si existe un archivo temporario, lo removemos por las dudas
         if os.path.exists(tmp_filename):
             os.remove(tmp_filename)
 
-        start = timer()
-
         log(f'{Fore.GREEN}--> PROCESO INICIADO <--{Style.RESET_ALL}')
-           
-        header = (file_input['header'] - 1) if file_input['header'] is not None else None
+
+
+        header = (file_input['header'] -
+                  1) if file_input['header'] is not None else None
+
+        log(f'-> Abriendo archivo {file_input["name"]}...')
 
         # Abrimos la planilla de entrada
         df_input = pd.read_excel(
-            io=file_input['name'], sheet_name=file_input['sheet_number'], engine='openpyxl', header=header)
+            file_input['name'],
+            sheet_name=file_input['sheet_number'],
+            engine='openpyxl',
+            header=header
+        )
+
+        log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
@@ -128,21 +142,23 @@ def init():
 
             if continue_from_last_file == True:
 
-                with open(file_to_continue, "rb") as f:
-                    file_ = io.BytesIO(f.read())
+                log(f'-> Abriendo archivo {file_to_continue}...')
 
                 df_prev = pd.read_excel(
-                    file_, sheet_name=params_sheet, engine='openpyxl')
-                process_number = df_prev['Procesamiento número'].iloc[-1]
+                    file_to_continue,
+                    sheet_name=None,
+                    engine='openpyxl'
+                )
+
+                params_sheet_df = df_prev[params_sheet]
+                process_number = params_sheet_df['Procesamiento número'].iloc[-1]
 
                 # Establecemos el valor de comienzo del loop para que continúe desde el último elemento
-                init_row_in = df_prev['Último elemento'].iloc[-1]
+                init_row_in = params_sheet_df['Último elemento'].iloc[-1]
                 append_existing_results = True
 
                 log(
-                    f'-> Procesamiento continúa desde archivo exitente, fila número {init_row_in}')
-
-                df_prev = None
+                    f'-> Procesamiento continúa desde archivo existente, fila número {init_row_in}')
 
         def get_number_prompt():
             prompt = input('¿Cuántas filas querés buscar?: ')
@@ -151,9 +167,13 @@ def init():
                 prompt = get_number_prompt()
 
             return int(prompt)
+        
+        start_time = timer()
 
         limit_results = get_number_prompt()
         print(f'-> Buscando {limit_results} filas')
+
+        log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
         # loopeamos por cada fila de la planilla
         for i in range(init_row_in, len(df_input)):
@@ -205,6 +225,8 @@ def init():
             if works_count_1 == 0 and works_count_2 == 0:
                 res_authors_no_works.append(author)
 
+            log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+
         log('\n')
         log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
 
@@ -215,15 +237,20 @@ def init():
 
     finally:
 
-        df_input = None  # Limpiamos de la memoria el dataframe de entrada
+        del df_input  # Limpiamos de la memoria el dataframe de entrada
 
-        end = timer()
-        elapsed_time = round(end - start)
+        end_download = timer()
+        elapsed_time = round(end_download - start_time)
         show_stats()
+        
         write_results()
-
+        end_file = timer()
+        elapsed_time_file = round(end_file - end_download)
+        log(f'Tiempo transcurrido en la escritura (segundos): {elapsed_time_file}')
+        
         if on_error == True:
-            log(f'{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')  # oh no
+            # oh no
+            log(f'{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')
 
 
 def get_last_file():
@@ -253,7 +280,7 @@ def show_stats():
     log(f'{Fore.YELLOW}Autores no encontrados: {len(res_authors_not_found)}{Style.RESET_ALL}')
     log(f'{Fore.YELLOW}Autores sin trabajos: {len(res_authors_no_works)}{Style.RESET_ALL}')
     log(f'Peticiones a la API: {count_request}')
-    log(f'Tiempo transcurrido (segundos): {elapsed_time}')
+    log(f'Tiempo transcurrido en la descarga (segundos): {elapsed_time}')
     log(f'-----------------------------------')
 
 
@@ -313,68 +340,88 @@ def write_results():
 
         # Si hay que continuar un archivo existente, agregamos las nuevas filas al final
         if append_existing_results:
-            with open(file_to_continue, "rb") as f:
-                file_io_obj = io.BytesIO(f.read())
+            sheet = df_prev[sheet_name]
+            df = pd.concat([sheet, df], axis=0)
 
-            df_prev = pd.read_excel(
-                file_io_obj, sheet_name=sheet_name, engine='openpyxl')
-            df = pd.concat([df_prev, df], axis=0)
-
-        df_prev = None
         df = order_columns(df)
 
         df.to_excel(
-            writer, sheet_name=sheet_name, header=header, index=index
+            writer,
+            sheet_name=sheet_name,
+            header=header,
+            index=index,
+            verbose=True
         )
 
-        df = None
+        del df
+    try:
+        date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+        file_name = f"{file_output['folder_name']}/{file_output['name']} ({date})"
 
-    # Creamos archivo xls con resultados
-    writer = pd.ExcelWriter(tmp_filename)
+        # Creamos archivo xls con resultados
+        writer = pd.ExcelWriter(
+            tmp_filename,
+            engine='xlsxwriter',
+            engine_kwargs={'options': {
+                'strings_to_urls': False,
+                #'strings_to_numbers': False
+            }}
+        )
 
-    log('Escribiendo archivo...')
+        log('Escribiendo archivo...')
 
-    # Escribimos hojas
-    write_sheet(res_works_output, 'Works')
-    write_sheet(res_works_no_country_output, 'Works sin coincidencia de país')
-    write_sheet({'Listado': res_authors_not_found}, 'Autores no encontrados')
-    write_sheet({'Listado': res_authors_no_works}, 'Autores sin works')
+        # Escribimos hojas
+        log('-> Escribiendo hoja "Works"...')
+        write_sheet(res_works_output, 'Works')
 
-    # Guardamos valores del procesamiento
-    params = {
-        'Procesamiento número': process_number + 1,
-        'Autores encontrados': count_authors,
-        'Trabajos encontrados': len(res_works_output),
-        'Autores no encontrados': len(res_authors_not_found),
-        'Peticiones a la API': count_request,
-        'Tiempo transcurrido (segundos)': elapsed_time,
-        'Fecha': datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss'),
-        'Último elemento': last_row
-    }
+        log('-> Escribiendo hoja "Works sin coincidencia de país"...')
+        write_sheet(res_works_no_country_output,
+                    'Works sin coincidencia de país')
 
-    write_sheet(pd.DataFrame(params, index=[0]), params_sheet)
+        log('-> Escribiendo hoja "Autores no encontrados"...')
+        write_sheet({'Listado': res_authors_not_found},
+                    'Autores no encontrados')
 
-    # Guardamos xls
-    writer.close()
+        log('-> Escribiendo hoja "Autores sin works"...')
+        write_sheet({'Listado': res_authors_no_works}, 'Autores sin works')
 
-    if append_existing_results:
-        # Removemos archivo viejo
-        os.remove(file_to_continue)
+        # Guardamos valores del procesamiento
+        params = {
+            'Procesamiento número': process_number + 1,
+            'Autores encontrados': count_authors,
+            'Trabajos encontrados': len(res_works_output),
+            'Autores no encontrados': len(res_authors_not_found),
+            'Peticiones a la API': count_request,
+            'Tiempo transcurrido en la descarga (segundos)': elapsed_time,
+            'Fecha': datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss'),
+            'Último elemento': last_row
+        }
 
-    # Renombramos temporal
-    date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+        log(f'-> Escribiendo hoja "{params_sheet}"...')
+        write_sheet(pd.DataFrame(params, index=[0]), params_sheet)
 
-    # creamos carpeta output si no existe
-    if not os.path.exists(file_output['folder_name']):
-        os.makedirs(file_output['folder_name'])
+        # Guardamos xls
+        writer.close()
 
-    file_name = f"{file_output['folder_name']}/{file_output['name']} ({date})"
-    os.rename(tmp_filename, file_name + '.xlsx')
+        if append_existing_results:
+            # Removemos archivo viejo
+            os.remove(file_to_continue)
 
-    log(f'{Fore.GREEN}--> Archivo creado {file_name} <--{Style.RESET_ALL}')
+        # creamos carpeta output si no existe
+        if not os.path.exists(file_output['folder_name']):
+            os.makedirs(file_output['folder_name'])
 
-    if use_log:
-        os.rename('log.txt', file_name + '_log.txt')
+        # Renombramos temporal
+        os.rename(tmp_filename, file_name + '.xlsx')
+
+        log(f'{Fore.GREEN}--> Archivo creado {file_name} <--{Style.RESET_ALL}')
+
+    except Exception as error:
+        log(f'{Fore.RED}{error}{Style.RESET_ALL}')
+
+    finally:
+        if use_log:
+            os.rename(f'{tmp_log_filename}', f'{file_name}_log.txt')
 
 
 def log(arg):
@@ -384,13 +431,14 @@ def log(arg):
     print(arg)
 
     if use_log == True:
-        with open("log.txt", "a", encoding="utf-8") as file:
+        with open(f"{tmp_log_filename}", "a", encoding="utf-8") as file:
             date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
             if arg == '\n':
                 file.write(arg)
             else:
                 # ansi scape tor emove colorama colors
-                arg = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]').sub('', arg)
+                arg = re.compile(
+                    r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]').sub('', arg)
                 file.write(f'{date} {arg}\n')
 
 
@@ -455,7 +503,7 @@ def search_author(author_results, limit_authors_results, i, df):
                                 if inst['country_code'] in country_filter['country_code']:
                                     valid_country = True
                     except Exception as error:
-                        log(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
+                        #print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
                         pass
 
             if valid_country == False:
@@ -487,10 +535,10 @@ def search_author(author_results, limit_authors_results, i, df):
             results['Autor encontrado id'] = author_id
 
             if isinstance(valid_country, bool):
-                valid_country = 0 if valid_country == False else 1           
+                valid_country = 0 if valid_country == False else 1
 
-            results['Código de país válido'] = valid_country          
-           
+            results['Código de país válido'] = valid_country
+
             results['relevance_score'] = relevance_score
 
             for column_to_save in works_columns_to_save:
@@ -790,6 +838,11 @@ def has_accents(s):
     Chequea si un string tiene tildes
     '''
     return re.search(r'[àáâãäåèéêëìíîïòóôõöùúûü]+', s, flags=re.IGNORECASE)
+
+
+def usage():
+    process = psutil.Process(os.getpid())
+    return str(round(process.memory_info()[0] / float(2 ** 20), 2)) + ' MB'
 
 
 init()
