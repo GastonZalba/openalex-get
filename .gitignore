@@ -2,4 +2,6 @@
 __pycache__
 *.xlsx
 *.txt
+*.csv
 extract_surnames
+_tmp

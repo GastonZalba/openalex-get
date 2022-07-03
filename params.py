@@ -17,12 +17,23 @@ file_input = {
 }
 
 file_output = {
+
     # carpeta donde se guardan los resultados
     "folder_name": 'results',
 
-    # nombre del archivo (se agregará automáticamente la fecha de creación)
-    "name": 'openalex-results'
+    # nombre principal del archivo
+    "name": 'openalex-results',
+
+    # nombre secundario de archivos
+    "works_sheet": 'Works',
+    "works_no_country_sheet": 'Works sin coincidencia de país',
+    "authors_no_works_sheet": 'Autores sin works',
+    "authors_no_found_sheet": 'Autores no encontrados',
+    "params_sheet": 'Params',
 }
+
+# separador para usar cuando se unen valores de listas en una misma celda
+join_separator = ', '
 
 main_search = {
     "limit_authors_results": 2,  # Cantidad de variaciones a guardar

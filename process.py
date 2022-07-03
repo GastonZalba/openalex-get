@@ -1,8 +1,6 @@
 import os
 import re
 import json
-import glob
-from tabnanny import verbose
 import psutil
 import requests
 import traceback
@@ -62,8 +60,6 @@ res_authors_no_country_code = []
 
 count_authors = 0
 
-process_number = 0
-
 last_row = 1
 
 # para saber cuánto tarda en hacerse el proceso
@@ -73,20 +69,23 @@ end_time = None
 
 file_to_continue = None
 
-params_sheet = 'Params'
-
 append_existing_results = False
 
 # Almacena los id de authores ya encontrados (para prevenir duplicados)
 author_ids = []
 
-tmp_filename = "openalex_tmp.xlsx"
+params_sheet = file_output['params_sheet']
+works_sheet = file_output['works_sheet']
+works_no_country_sheet = file_output['works_no_country_sheet']
+authors_no_works_sheet = file_output['authors_no_works_sheet']
+authors_no_found_sheet = file_output['authors_no_found_sheet']
 
+# Archivos y carpetas temporales
+tmp_folder = '_tmp'
 # Añadimos fecha al log temporal para evitar que se sobreescriba en futuras ejecuciones que terminen abruptamente
 log_time = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-tmp_log_filename = f'log_tmp_{log_time}.txt'
+tmp_log_filename = f'{tmp_folder}/log_tmp_{log_time}.txt'
 
-df_prev = None
 
 def init():
 
@@ -94,16 +93,14 @@ def init():
 
     try:
 
-        global start_time, tmp_filename, count_authors, elapsed_time, process_number, last_row, append_existing_results, file_to_continue, tmp_log_filename, df_prev
+        global start_time, count_authors, elapsed_time, last_row, append_existing_results, file_to_continue, tmp_log_filename
 
-
-        # si existe un archivo temporario, lo removemos por las dudas
-        if os.path.exists(tmp_filename):
-            os.remove(tmp_filename)
+        # creamos carpeta para almacenar temprarios
+        if not os.path.exists(tmp_folder):
+            os.makedirs(tmp_folder)
 
         log(f'{Fore.GREEN}--> PROCESO INICIADO <--{Style.RESET_ALL}')
-
-
+        
         header = (file_input['header'] -
                   1) if file_input['header'] is not None else None
 
@@ -122,18 +119,33 @@ def init():
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
 
-        file_to_continue = get_last_file()
+        previous_exports = get_previous_exports()
 
-        if file_to_continue != None:
+        if len(previous_exports) > 1:
 
             def get_continue_prompt():
                 prompt = input(
-                    '¿Querés continuar trabajando con el último archivo? (Y or N): ')
+                    '¿Querés continuar trabajando con un procesamiento previo? (Y or N): ')
 
                 if prompt.lower() != 'y' and prompt.lower() != 'n':
                     prompt = get_continue_prompt()
 
                 return prompt
+
+            def select_export_prompt():
+
+                print('/t')
+                print('Procesamientos existentes:')
+
+                for n, pe in enumerate(previous_exports):
+                    print(f'-> {[n+1]} {pe}')
+                    
+                prompt = input(f'Selecciona el número de ejecución (1-{len(previous_exports)}): ')
+
+                if int(prompt) > (len(previous_exports)) or int(prompt) < 1:
+                    prompt = select_export_prompt()
+
+                return previous_exports[int(prompt)-1]
 
             # para evaluar si hay que continuar procesando el último archivo o hacer uno nuevo
             continue_prompt = get_continue_prompt()
@@ -142,23 +154,16 @@ def init():
 
             if continue_from_last_file == True:
 
+                file_to_continue = select_export_prompt()
+
                 log(f'-> Abriendo archivo {file_to_continue}...')
 
-                df_prev = pd.read_excel(
-                    file_to_continue,
-                    sheet_name=None,
-                    engine='openpyxl'
-                )
-
-                params_sheet_df = df_prev[params_sheet]
-                process_number = params_sheet_df['Procesamiento número'].iloc[-1]
-
                 # Establecemos el valor de comienzo del loop para que continúe desde el último elemento
-                init_row_in = params_sheet_df['Último elemento'].iloc[-1]
+                init_row_in = get_last_row()
                 append_existing_results = True
 
                 log(
-                    f'-> Procesamiento continúa desde archivo existente, fila número {init_row_in}')
+                    f'-> El procesamiento va continuar desde la fila número {init_row_in}')
 
         def get_number_prompt():
             prompt = input('¿Cuántas filas querés buscar?: ')
@@ -167,7 +172,7 @@ def init():
                 prompt = get_number_prompt()
 
             return int(prompt)
-        
+
         start_time = timer()
 
         limit_results = get_number_prompt()
@@ -227,8 +232,6 @@ def init():
 
             log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
-        log('\n')
-        log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
@@ -242,33 +245,85 @@ def init():
         end_download = timer()
         elapsed_time = round(end_download - start_time)
         show_stats()
-        
-        write_results()
+
+        file_name = write_results()
+
         end_file = timer()
-        elapsed_time_file = round(end_file - end_download)
-        log(f'Tiempo transcurrido en la escritura (segundos): {elapsed_time_file}')
-        
+        [time, type] = seconds_to_minutes(round(end_file - end_download))
+        log(f'--> Tiempo transcurrido en la escritura: {time} {type}')
+
+        log_params()
+
         if on_error == True:
             # oh no
-            log(f'{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')
+            log(f'\n{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')
+        
+        log('\n')
+        log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
+
+        if use_log:
+            os.rename(f'{tmp_log_filename}',
+                      f'{file_output["folder_name"]}/{file_name}/{file_name} - Log.txt')
 
 
-def get_last_file():
+def open_file_from_sheet(sheet):
     '''
-    Obtiene el último archivo creado para poder continuar la ejecución
+    Devuelve
     '''
-    last_file = None
+    global file_to_continue
+    file = f"{file_output['folder_name']}/{file_to_continue}/{file_to_continue} - {sheet}.csv"
+    return pd.read_csv(file, engine='python')
 
-    # obtenemos todos los archivos creados
-    list_of_files = glob.glob(
-        f'{file_output["folder_name"]}/{file_output["name"]}*.xlsx')
+def get_previous_exports():
+    '''
+    Obtiene anteriores exportaciones para poder continuar la ejecución
+    '''
+    # obtenemos todos los exports creados
+    list_of_exports = os.listdir(file_output["folder_name"])
 
-    if len(list_of_files):
-        # seleccionamos el archivo más nuevo
-        last_file = max(list_of_files, key=os.path.getctime)
+    return list_of_exports
 
-    return last_file
 
+def get_last_row():
+    '''
+    Buscamos el valor de comienzo del loop para que continúe desde el último elemento
+    '''
+    if not file_to_continue:
+        return 0
+
+    df = open_file_from_sheet(params_sheet)
+    
+    return df['Último elemento'].iloc[-1]
+
+
+def get_last_process_number():
+    '''
+    Buscamos el valor del último procesamiento
+    '''
+
+    if not file_to_continue:
+        return 0
+
+    df = open_file_from_sheet(params_sheet)
+
+    return df['Procesamiento número'].iloc[-1]
+
+def log_params():
+    '''
+    Guarda parámetros de configuración el log sin printear en consola
+    '''
+    log('\n', False)
+    log('Parámetros de búsqueda:', False)
+    log(f'-> File output: ' + str(file_output), False)
+    log(f'-> File input: {str(file_input)}', False)
+    log(f'-> Join separator: {str(join_separator)}', False)
+    log(f'-> Main search: {str(main_search)}', False)
+    log(f'-> Secondary search: {str(secondary_search)}', False)
+    log(f'-> Country filter: {str(country_filter)}', False)
+    log(f'-> Min score relevance: {str(min_score_relevance)}', False)
+    log(f'-> Type: {str(type)}', False)
+    log(f'-> Use accent Variations: {str(use_accent_variations)}', False)
+    log(f'-> Works columns to save: {str(works_columns_to_save)}', False)
 
 def show_stats():
     '''
@@ -280,7 +335,8 @@ def show_stats():
     log(f'{Fore.YELLOW}Autores no encontrados: {len(res_authors_not_found)}{Style.RESET_ALL}')
     log(f'{Fore.YELLOW}Autores sin trabajos: {len(res_authors_no_works)}{Style.RESET_ALL}')
     log(f'Peticiones a la API: {count_request}')
-    log(f'Tiempo transcurrido en la descarga (segundos): {elapsed_time}')
+    [time, type] = seconds_to_minutes(elapsed_time)
+    log(f'Tiempo transcurrido en la descarga {time} {type}')
     log(f'-----------------------------------')
 
 
@@ -340,59 +396,56 @@ def write_results():
 
         # Si hay que continuar un archivo existente, agregamos las nuevas filas al final
         if append_existing_results:
-            sheet = df_prev[sheet_name]
+            sheet = open_file_from_sheet(sheet_name)
             df = pd.concat([sheet, df], axis=0)
 
         df = order_columns(df)
 
-        df.to_excel(
-            writer,
-            sheet_name=sheet_name,
+        df.to_csv(
+            f'{file_path}/{file_name} - {sheet_name}.csv',
             header=header,
             index=index,
-            verbose=True
+            encoding='utf-8-sig'
         )
 
         del df
     try:
-        date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
-        file_name = f"{file_output['folder_name']}/{file_output['name']} ({date})"
 
-        # Creamos archivo xls con resultados
-        writer = pd.ExcelWriter(
-            tmp_filename,
-            engine='xlsxwriter',
-            engine_kwargs={'options': {
-                'strings_to_urls': False,
-                #'strings_to_numbers': False
-            }}
-        )
+        date = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
+
+        file_name = f"{file_output['name']} ({date})"
+        file_path = f"{file_output['folder_name']}/{file_name}"
+
+        # creamos carpeta output
+        os.makedirs(file_path)
 
         log('Escribiendo archivo...')
 
         # Escribimos hojas
-        log('-> Escribiendo hoja "Works"...')
-        write_sheet(res_works_output, 'Works')
+        log(f'-> Escribiendo hoja "{works_sheet}"...')
+        write_sheet(res_works_output, works_sheet)
 
-        log('-> Escribiendo hoja "Works sin coincidencia de país"...')
+        log(f'-> Escribiendo hoja "{works_no_country_sheet}"...')
         write_sheet(res_works_no_country_output,
-                    'Works sin coincidencia de país')
+                    works_no_country_sheet)
 
-        log('-> Escribiendo hoja "Autores no encontrados"...')
+        log(f'-> Escribiendo hoja "{authors_no_found_sheet}"...')
         write_sheet({'Listado': res_authors_not_found},
-                    'Autores no encontrados')
+                    authors_no_found_sheet)
 
-        log('-> Escribiendo hoja "Autores sin works"...')
-        write_sheet({'Listado': res_authors_no_works}, 'Autores sin works')
+        log(f'-> Escribiendo hoja "{authors_no_works_sheet}"...')
+        write_sheet({'Listado': res_authors_no_works}, authors_no_works_sheet)
+
+        [time, type] = seconds_to_minutes(elapsed_time)
 
         # Guardamos valores del procesamiento
         params = {
-            'Procesamiento número': process_number + 1,
+            'Procesamiento número': get_last_process_number() + 1,
             'Autores encontrados': count_authors,
             'Trabajos encontrados': len(res_works_output),
             'Autores no encontrados': len(res_authors_not_found),
             'Peticiones a la API': count_request,
-            'Tiempo transcurrido en la descarga (segundos)': elapsed_time,
+            'Tiempo transcurrido en la descarga': f'{time} {type}',
             'Fecha': datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss'),
             'Último elemento': last_row
         }
@@ -400,35 +453,24 @@ def write_results():
         log(f'-> Escribiendo hoja "{params_sheet}"...')
         write_sheet(pd.DataFrame(params, index=[0]), params_sheet)
 
-        # Guardamos xls
-        writer.close()
-
-        if append_existing_results:
-            # Removemos archivo viejo
-            os.remove(file_to_continue)
-
-        # creamos carpeta output si no existe
-        if not os.path.exists(file_output['folder_name']):
-            os.makedirs(file_output['folder_name'])
-
-        # Renombramos temporal
-        os.rename(tmp_filename, file_name + '.xlsx')
-
-        log(f'{Fore.GREEN}--> Archivo creado {file_name} <--{Style.RESET_ALL}')
+        log(f'{Fore.GREEN}--> Export finalizado "{file_name}" <--{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
+        log(f'{Fore.RED}{traceback.format_exc()}{Style.RESET_ALL}')
 
     finally:
-        if use_log:
-            os.rename(f'{tmp_log_filename}', f'{file_name}_log.txt')
+        return file_name
 
 
-def log(arg):
+
+def log(arg, _print = True):
     '''
     Print que además crea un archivo log si está activado
     '''
-    print(arg)
+    
+    if _print:
+        print(arg)
 
     if use_log == True:
         with open(f"{tmp_log_filename}", "a", encoding="utf-8") as file:
@@ -503,7 +545,7 @@ def search_author(author_results, limit_authors_results, i, df):
                                 if inst['country_code'] in country_filter['country_code']:
                                     valid_country = True
                     except Exception as error:
-                        #print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
+                        # print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
                         pass
 
             if valid_country == False:
@@ -582,7 +624,7 @@ def parse_column_values(cols, api_values, results, num='', name=''):
                     l = []
                     for a in value:
                         l.append(a[col])
-                    value = ', '.join(str(v) for v in l)
+                    value = join_separator.join(str(v) for v in l)
                     break
                 else:
                     skip = True
@@ -818,6 +860,15 @@ def get_works_from_api(author_id, page=1):
         data['results'] = [*data['results'], *new_page['results']]
 
     return data
+
+
+def seconds_to_minutes(sec):
+    min = sec / 60
+
+    if (min) > 2:
+        return [round(min,2), 'minutos']
+    else:
+        return [round(sec), 'segundos']
 
 
 def remove_accents(input_str):
