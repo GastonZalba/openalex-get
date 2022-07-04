@@ -817,7 +817,10 @@ def get_author_from_api(author, search_type='main'):
         params=params
     )
 
-    data = r.json()
+    try:
+        data = r.json()
+    except Exception:
+        raise ValueError('La API devolvió una respuesta invalida')
 
     count_request += 1
 
@@ -848,8 +851,11 @@ def get_works_from_api(author_id, page=1):
         url=url,
         params=params
     )
-
-    data = r.json()
+    
+    try:
+        data = r.json()
+    except Exception:
+        raise ValueError('La API devolvió una respuesta invalida')
 
     count_request += 1
 
