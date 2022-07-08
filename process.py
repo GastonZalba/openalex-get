@@ -278,8 +278,11 @@ def get_previous_exports():
     '''
     Obtiene anteriores exportaciones para poder continuar la ejecución
     '''
-    # obtenemos todos los exports creados
-    list_of_exports = os.listdir(file_output["folder_name"])
+    list_of_exports = []
+    
+    if os.path.exists(file_output["folder_name"]):
+        # obtenemos todos los exports creados
+        list_of_exports = os.listdir(file_output["folder_name"])
 
     return list_of_exports
 
