@@ -44,6 +44,7 @@ main_search = {
 
 # Búsqueda que se realiza si la primera no devuelve X cantidad de resultados
 secondary_search = {
+    "enabled": True, # False para deshabilitar
     "min": 10,  # Cantidad de works hallados en la búsqueda principal hasta la cual se realiza la búsueda secundaria
     "limit_authors_result": 1,  # Cantidad de variaciones a guardar
     "use_fullname": True, # Buscar con el nombre completo
@@ -61,10 +62,14 @@ secondary_search = {
 min_score_relevance = None
 
 country_filter = {
-    # Primero se revisa el campo last_known_institution https://docs.openalex.org/about-the-data/author#last_known_institution
-    # y luego el valor de todos los trabajos encontrados de ese autor 
+    # Se revisa el campo authorships.institution en todos los trabajos encontrados de ese autor 
     # Ej.: ['AR', 'CA']. `None` para deshabilitar
     "country_code": ['AR'],
+
+    # Porcentaje de trabajos del autor matcheado para considerarlo perteneciente al país seleccionado
+    # Tener en cuenta que muchos trabajos devueltos no poseen este campo, con lo cual el porcentaje
+    # suele ser relativamente bajo 
+    "match_percentage": 10,
 
     # Para descartar o mantener los valores vacíos
     # En caso de que se preserven, estos se crearán en una hoja separada

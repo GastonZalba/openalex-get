@@ -211,16 +211,17 @@ def init():
             log(f'-> {works_count_1} works encontrados en primera instancia')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
-            if works_count_1 == None or works_count_1 <= secondary_search['min']:
-                log(f'-> Realizando búsqueda ampliada... {author}')
+            if secondary_search['enabled']:
+                if works_count_1 == None or works_count_1 <= secondary_search['min']:
+                    log(f'-> Realizando búsqueda ampliada... {author}')
 
-                # Búsqueda secundaria
-                author_results = get_author_from_api(
-                    author, search_type='secondary')
-                works_count_2 = search_author(
-                    author_results, secondary_search['limit_authors_result'], i, df_input)
+                    # Búsqueda secundaria
+                    author_results = get_author_from_api(
+                        author, search_type='secondary')
+                    works_count_2 = search_author(
+                        author_results, secondary_search['limit_authors_result'], i, df_input)
 
-                log(f'-> {works_count_2} works encontrados en segunda instancia')
+                    log(f'-> {works_count_2} works encontrados en segunda instancia')
 
             if works_count_1 == None and works_count_2 == None:
                 res_authors_not_found.append(author)
@@ -503,20 +504,8 @@ def search_author(author_results, limit_authors_results, i, df):
     # Por cada autor encontrado buscamos sus trabajos
     for author_found in author_results['results']:
 
-        valid_country = False if country_filter['country_code'] is not None else True
-
         if authors_variations >= limit_authors_results:
             break
-
-        # Si está seteado el filtro, sólo nos quedamos con los autores de un determinado país
-        if country_filter['country_code'] is not None:
-
-            if author_found['last_known_institution'] is None:
-                valid_country = None
-            else:
-                # Si el autor no es de este país, continuamos
-                if author_found['last_known_institution']['country_code'] in country_filter['country_code']:
-                    valid_country = True
 
         author_name = author_found['display_name']
         relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
@@ -528,7 +517,7 @@ def search_author(author_results, limit_authors_results, i, df):
         # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
         author_id = author_found['id'].rsplit('/', 1)[-1]
 
-        # si este autor ya fue guardado lo salteamos
+        # si este autor ya fue guardado porque matcheó una búsqueda anterior, lo salteamos
         if author_id in author_ids:
             continue
 
@@ -536,33 +525,53 @@ def search_author(author_results, limit_authors_results, i, df):
 
         works_results = get_works_from_api(author_id)
         count_works_results = works_results['meta']['count']
+     
+        log(f'---> {count_works_results} trabajos encontrados para autor {author_name} - {author_id} - Score: {relevance_score}')
+   
+        # En algunos casos los trabajos devueltos para un autor son 0 (?!)
+        if count_works_results == 0:
+            # skip author
+            continue
 
         # check country
         if country_filter['country_code'] is not None:
-            if valid_country == False or valid_country is None:
-                for workFound in works_results['results']:
-                    try:
-                        for autorship in workFound['authorships']:
-                            for inst in autorship['institutions']:
-                                # Si un autorship de un trabajo es coincidente, lo tomamos como válido
-                                if inst['country_code'] in country_filter['country_code']:
-                                    valid_country = True
-                    except Exception as error:
-                        # print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
-                        pass
+            valid_country_count = 0
+            for workFound in works_results['results']:
+                try:
+                    valid_country = False
+                    for autorship in workFound['authorships']:
+                        for inst in autorship['institutions']:
+                            # Si un autorship de un trabajo es coincidente, lo tomamos como válido
+                            if inst['country_code'] in country_filter['country_code']:
+                                valid_country = True
+                                continue
+                        if valid_country == True:
+                            valid_country_count += 1
+                            break
 
-            if valid_country == False:
-                continue
+                except Exception as error:
+                    # print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
+                    pass
 
+            percentage_matched = valid_country_count / count_works_results * 100
+
+            log(f'--> Porcentaje correspondiente al pais: {percentage_matched}')
+            
             if country_filter['preserve_null'] != True:
-                if valid_country == None:
+                if valid_country == False and valid_country_count == 0:
+                    valid_country = None
+                    # skip author
                     continue
 
+            if (percentage_matched >= country_filter['match_percentage']):
+                log(f'{Fore.GREEN}---> Porcentaje mínimo alcanzado{Style.RESET_ALL}')
+            else:
+                log(f'{Fore.YELLOW}---> Porcentaje insuficiente, autor descartado{Style.RESET_ALL}')
+                continue
+        
         if count_works_results != 0:
             filtered_works_count = count_works_results
             total_works_count_from_author += filtered_works_count
-
-        log(f'---> {count_works_results} trabajos encontrados para autor {author_name} - {author_id} - Score: {relevance_score}')
 
         authors_variations += 1
 
