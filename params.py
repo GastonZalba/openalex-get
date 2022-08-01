@@ -56,10 +56,19 @@ secondary_search = {
     "use_second_surname_only": True  # Buscar sólo el segundo apellido (solo se aplica a apellidos dobles)
 }
 
-# Si se habilita, resultados que estén por debajo de este valor no serán tomados en cuenta
-# y también se descartarán aquellos valores que no contengan ningún valor
-# Ej: `500`. `None` para deshabilitar
-min_score_relevance = None
+custom_filters = {
+    # Compara el nombre del autor devuelto por la api con el original provisto, y chequea que no tenga
+    # apellidos, nombres o inciales que no coincidan con el original. Esto posibilita remover matcheos de autores
+    # similares que la api devuelve con Score alto. Ej.: "Juan Carlos Pérez" != "Juan P Pérez"
+    # Como contrapartida, puede remover algunos matcheos válidos que se dan cuando la api devuelve un apellido extra
+    # (generalmente mujeres cargadas con apellido de casada). Ej.: "Juana Pérez de Sánchez" != "Juana Pérez".
+    "discard_extra_words": True,
+
+    # Si se habilita, resultados que estén por debajo de este valor no serán tomados en cuenta
+    # y también se descartarán aquellos valores que no contengan ningún valor
+    # Ej: `500`. `None` para deshabilitar
+    "min_score_relevance" : None
+}
 
 country_filter = {
     # Se revisa el campo authorships.institution en todos los trabajos encontrados de ese autor 
@@ -79,7 +88,7 @@ country_filter = {
 
 # Filtramos los works que son journal-article
 # Ej.: `['journal-article', 'null']`. `None` para deshabilitar
-type = ['journal-article', 'null']
+type = ['journal-article']
 
 # True para agregar tildes a través del matcheo comparativo con las listas
 use_accent_variations = True

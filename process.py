@@ -205,8 +205,12 @@ def init():
             if count_author_results == 0:
                 works_count_1 = None
             else:
-                works_count_1 = search_author(
-                    author_results, main_search['limit_authors_results'], i, df_input)
+                works_count_1 = search_author(author, 
+                    author_results,
+                     main_search['limit_authors_results'], 
+                     i,
+                      df_input
+                      )
 
             log(f'-> {works_count_1} works encontrados en primera instancia')
 
@@ -219,7 +223,12 @@ def init():
                     author_results = get_author_from_api(
                         author, search_type='secondary')
                     works_count_2 = search_author(
-                        author_results, secondary_search['limit_authors_result'], i, df_input)
+                        author, 
+                        author_results, 
+                        secondary_search['limit_authors_result'],
+                         i,
+                         df_input
+                        )
 
                     log(f'-> {works_count_2} works encontrados en segunda instancia')
 
@@ -324,7 +333,7 @@ def log_params():
     log(f'-> Main search: {str(main_search)}', False)
     log(f'-> Secondary search: {str(secondary_search)}', False)
     log(f'-> Country filter: {str(country_filter)}', False)
-    log(f'-> Min score relevance: {str(min_score_relevance)}', False)
+    log(f'-> Min score relevance: {str(custom_filters)}', False)
     log(f'-> Type: {str(type)}', False)
     log(f'-> Use accent Variations: {str(use_accent_variations)}', False)
     log(f'-> Works columns to save: {str(works_columns_to_save)}', False)
@@ -488,7 +497,7 @@ def log(arg, _print = True):
                 file.write(f'{date} {arg}\n')
 
 
-def search_author(author_results, limit_authors_results, i, df):
+def search_author(author_original_name, author_results, limit_authors_results, i, df):
     '''
     Devuelve la cantidad de trabajos encontrados del autor según los filtros establecidos
     '''
@@ -507,11 +516,17 @@ def search_author(author_results, limit_authors_results, i, df):
         if authors_variations >= limit_authors_results:
             break
 
-        author_name = author_found['display_name']
+        author_api_name = author_found['display_name']
+
+        if custom_filters['discard_extra_words']:
+            # si no matchea esta comprobación, seguimos con el siguiente autor
+            if not check_invalid_api_words_and_initials(author_original_name, author_api_name):
+                continue
+
         relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
 
-        if min_score_relevance is not None:
-            if relevance_score is None or relevance_score < min_score_relevance:
+        if custom_filters['min_score_relevance'] is not None:
+            if relevance_score is None or relevance_score < custom_filters['min_score_relevance']:
                 continue
 
         # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
@@ -526,7 +541,7 @@ def search_author(author_results, limit_authors_results, i, df):
         works_results = get_works_from_api(author_id)
         count_works_results = works_results['meta']['count']
      
-        log(f'---> {count_works_results} trabajos encontrados para autor {author_name} - {author_id} - Score: {relevance_score}')
+        log(f'---> {count_works_results} trabajos encontrados para autor {author_api_name} - {author_id} - Score: {relevance_score}')
    
         # En algunos casos los trabajos devueltos para un autor son 0 (?!)
         if count_works_results == 0:
@@ -585,7 +600,7 @@ def search_author(author_results, limit_authors_results, i, df):
             for col in list(df.columns):
                 results[col] = df[col][i]
 
-            results['Autor encontrado'] = author_name
+            results['Autor encontrado'] = author_api_name
             results['Autor encontrado id'] = author_id
 
             if isinstance(valid_country, bool):
@@ -832,7 +847,7 @@ def get_author_from_api(author, search_type='main'):
     try:
         data = r.json()
     except Exception:
-        raise ValueError('La API devolvió una respuesta invalida')
+        raise ValueError('La API devolvió una respuesta inválida')
 
     count_request += 1
 
@@ -881,6 +896,9 @@ def get_works_from_api(author_id, page=1):
 
 
 def seconds_to_minutes(sec):
+    '''
+    Convierte minutos a segundos según el tamaño del número para facilitar lectura
+    '''
     min = sec / 60
 
     if (min) > 2:
@@ -910,8 +928,65 @@ def has_accents(s):
 
 
 def usage():
+    '''
+    Devuelve la cantidad e RAM usada por el script
+    '''
     process = psutil.Process(os.getpid())
     return str(round(process.memory_info()[0] / float(2 ** 20), 2)) + ' MB'
 
+
+def check_invalid_api_words_and_initials(author, author_api):
+    '''
+    Chequeo customizado para ver si el author devuelto por la api le sobran palabras extras (nombre o apellido)
+    Esto es útil para descartar falsos positivos que son devueltos con un leevador Score relevance a pesar de tener nombres distintos
+    '''
+    # removemos tildes y mayúsculas
+    author_api_normalized = remove_accents(author_api.lower())
+    author_api_normalized = author_api_normalized.replace('and ', '').replace('.', ' ').replace(',', '').replace('-', ' ').replace('  ', ' ')
+
+    # guardamos una copia de todas las palabras a matchear, y vamos removiendo a medida que matchean.
+    # al remanente, lo usamos para comparar si ha iniciales
+    author_api_normalized_list_initials = author_api_normalized.split(' ')
+
+    initials_list = []
+
+    # removemos mayúsculas
+    author_normalized = remove_accents(author.lower()).replace(',', '')
+    is_valid = True
+
+    for author_api_word in author_api_normalized.split(' '):        
+        # si es una inicial, la agregamos a una lista para compararla luego con todas las palabras que no matchean nada
+        if len(author_api_word) == 1:
+            initials_list.append(author_api_word)
+        else:
+            # si una palabra (apellido nombre) es devuelto por la api y no existe en el nombre original,
+            # lo descartamos y no seguimos con la comprobación
+            if author_api_word not in author_normalized:
+                is_valid = False
+                break
+            else:
+                # como ya matcheo esta palabra, la removemos de la comprobación futura de iniciales
+                author_api_normalized_list_initials.remove(author_api_word)
+
+
+    # si hasta acá es válido el matcheo, chequeamos iniciales con el resto de las palabras
+    # no matcheadas (y si es que existen iniciales)
+    if is_valid and len(initials_list):
+        valid_initial = False
+        for initial in initials_list:
+            for author_normalized_word in author_api_normalized_list_initials:
+                if initial == author_normalized_word[0]:
+                    valid_initial = True
+                    break
+        
+        if not valid_initial:
+            is_valid = False
+    
+    if not is_valid:
+        log(f'{Fore.YELLOW}---> Autor {author_api} devuelto por la api no coincide con el original {author}{Style.RESET_ALL}')
+    else:
+        log(f'{Fore.GREEN}---> Autor {author_api} devuelto por la api coincide con el original {author}{Style.RESET_ALL}')
+    
+    return is_valid
 
 init()
