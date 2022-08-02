@@ -238,7 +238,7 @@ def init():
 
                     log(f'-> {works_count_2} works encontrados en segunda instancia')
                     
-                    c1 = 0 if works_count_1 == 1 else works_count_1
+                    c1 = 0 if works_count_1 == None else works_count_1
                     log(f'-> {c1 + works_count_2 } works encontrados en total')
 
             if works_count_1 == None and works_count_2 == None:
