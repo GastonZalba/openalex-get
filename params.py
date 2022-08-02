@@ -29,6 +29,7 @@ file_output = {
     "works_no_country_sheet": 'Works sin coincidencia de país',
     "authors_no_works_sheet": 'Autores sin works',
     "authors_no_found_sheet": 'Autores no encontrados',
+    "auhors_count_works": 'Cantidad de trabajos por autor',
     "params_sheet": 'Params',
 }
 
@@ -83,7 +84,7 @@ country_filter = {
     # Para descartar o mantener los valores vacíos
     # En caso de que se preserven, estos se crearán en una hoja separada
     # `True` or `False`
-    "preserve_null": True
+    "preserve_null": False
 }
 
 # Filtramos los works que son journal-article

@@ -56,6 +56,8 @@ res_authors_not_found = []
 # autores de los cuales no se halló ningún trabajo
 res_authors_no_works = []
 
+res_authors_count_works = []
+
 res_authors_no_country_code = []
 
 count_authors = 0
@@ -79,6 +81,7 @@ works_sheet = file_output['works_sheet']
 works_no_country_sheet = file_output['works_no_country_sheet']
 authors_no_works_sheet = file_output['authors_no_works_sheet']
 authors_no_found_sheet = file_output['authors_no_found_sheet']
+authors_count_works = file_output['auhors_count_works']
 
 # Archivos y carpetas temporales
 tmp_folder = '_tmp'
@@ -100,7 +103,7 @@ def init():
             os.makedirs(tmp_folder)
 
         log(f'{Fore.GREEN}--> PROCESO INICIADO <--{Style.RESET_ALL}')
-        
+
         header = (file_input['header'] -
                   1) if file_input['header'] is not None else None
 
@@ -114,7 +117,7 @@ def init():
             header=header
         )
 
-        log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+        log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
@@ -139,8 +142,9 @@ def init():
 
                 for n, pe in enumerate(previous_exports):
                     print(f'-> {[n+1]} {pe}')
-                    
-                prompt = input(f'Selecciona el número de ejecución (1-{len(previous_exports)}): ')
+
+                prompt = input(
+                    f'Selecciona el número de ejecución (1-{len(previous_exports)}): ')
 
                 if int(prompt) > (len(previous_exports)) or int(prompt) < 1:
                     prompt = select_export_prompt()
@@ -178,7 +182,7 @@ def init():
         limit_results = get_number_prompt()
         print(f'-> Buscando {limit_results} filas')
 
-        log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+        log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
         # loopeamos por cada fila de la planilla
         for i in range(init_row_in, len(df_input)):
@@ -200,48 +204,74 @@ def init():
             log(
                 f'-> Autores matcheados para el autor {author}: {count_author_results}')
 
+            works_count_1 = None
+            works_count_2 = None
+
             # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
             # y continuamos con el siguiente autor
             if count_author_results == 0:
                 works_count_1 = None
             else:
-                works_count_1 = search_author(author, 
-                    author_results,
-                     main_search['limit_authors_results'], 
-                     i,
-                      df_input
-                      )
+                works_count_1 = search_author(author,
+                                              author_results,
+                                              main_search['limit_authors_results'],
+                                              i,
+                                              df_input
+                                              )
 
             log(f'-> {works_count_1} works encontrados en primera instancia')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
             if secondary_search['enabled']:
-                if works_count_1 == None or works_count_1 <= secondary_search['min']:
+                if works_count_1 == 0 or works_count_1 <= secondary_search['min']:
                     log(f'-> Realizando búsqueda ampliada... {author}')
 
                     # Búsqueda secundaria
                     author_results = get_author_from_api(
                         author, search_type='secondary')
                     works_count_2 = search_author(
-                        author, 
-                        author_results, 
+                        author,
+                        author_results,
                         secondary_search['limit_authors_result'],
-                         i,
-                         df_input
-                        )
+                        i,
+                        df_input
+                    )
 
                     log(f'-> {works_count_2} works encontrados en segunda instancia')
 
+                    log(f'-> {works_count_1 + works_count_2 } works encontrados en total')
+
             if works_count_1 == None and works_count_2 == None:
+                # Diccionario donde almacenamos los autores noe ncontrados
                 res_authors_not_found.append(author)
             else:
                 count_authors += 1
 
             if works_count_1 == 0 and works_count_2 == 0:
+                # Diccionario donde almacenamos los autores encontrados pero sin trabajos
                 res_authors_no_works.append(author)
+            
+            results = {}
+            # Obtenemos las columnas presentes en el excel original
+            for col in list(df_input.columns):
+                results[col] = df_input[col][i]          
 
-            log(f'{Fore.YELLOW}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+            # Usamos '-' si esa búsqueda no se hizo
+            # si se hizo pero no encontró resutlados, dejamos el 0
+            c1 = '-' if works_count_1 == None else works_count_1
 
+            if secondary_search['enabled']:
+                c2 = '-' if works_count_2 == None else works_count_2
+                results['Búsqueda principal'] = c1
+                results['Búsqueda secundaria'] = c2
+                results['TOTAL'] = (0 if c1 == '-' else c1) + (0 if c2 == '-' else c2)
+            else:
+                results['TOTAL'] = c1
+            
+            # Diccionario donde almacenamos la cantidad de trabajos en cada autor
+            res_authors_count_works.append(results)
+
+            log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
@@ -267,7 +297,7 @@ def init():
         if on_error == True:
             # oh no
             log(f'\n{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')
-        
+
         log('\n')
         log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
 
@@ -284,12 +314,13 @@ def open_file_from_sheet(sheet):
     file = f"{file_output['folder_name']}/{file_to_continue}/{file_to_continue} - {sheet}.csv"
     return pd.read_csv(file, engine='python')
 
+
 def get_previous_exports():
     '''
     Obtiene anteriores exportaciones para poder continuar la ejecución
     '''
     list_of_exports = []
-    
+
     if os.path.exists(file_output["folder_name"]):
         # obtenemos todos los exports creados
         list_of_exports = os.listdir(file_output["folder_name"])
@@ -305,7 +336,7 @@ def get_last_row():
         return 0
 
     df = open_file_from_sheet(params_sheet)
-    
+
     return df['Último elemento'].iloc[-1]
 
 
@@ -320,6 +351,7 @@ def get_last_process_number():
     df = open_file_from_sheet(params_sheet)
 
     return df['Procesamiento número'].iloc[-1]
+
 
 def log_params():
     '''
@@ -338,6 +370,7 @@ def log_params():
     log(f'-> Use accent Variations: {str(use_accent_variations)}', False)
     log(f'-> Works columns to save: {str(works_columns_to_save)}', False)
 
+
 def show_stats():
     '''
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
@@ -349,7 +382,7 @@ def show_stats():
     log(f'{Fore.YELLOW}Autores sin trabajos: {len(res_authors_no_works)}{Style.RESET_ALL}')
     log(f'Peticiones a la API: {count_request}')
     [time, type] = seconds_to_minutes(elapsed_time)
-    log(f'Tiempo transcurrido en la descarga {time} {type}')
+    log(f'Tiempo transcurrido en la descarga: {time} {type}')
     log(f'-----------------------------------')
 
 
@@ -449,6 +482,9 @@ def write_results():
         log(f'-> Escribiendo hoja "{authors_no_works_sheet}"...')
         write_sheet({'Listado': res_authors_no_works}, authors_no_works_sheet)
 
+        log(f'-> Escribiendo hoja "{authors_count_works}"...')
+        write_sheet(res_authors_count_works, authors_count_works)
+
         [time, type] = seconds_to_minutes(elapsed_time)
 
         # Guardamos valores del procesamiento
@@ -476,12 +512,11 @@ def write_results():
         return file_name
 
 
-
-def log(arg, _print = True):
+def log(arg, _print=True):
     '''
     Print que además crea un archivo log si está activado
     '''
-    
+
     if _print:
         print(arg)
 
@@ -527,6 +562,7 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
         if custom_filters['min_score_relevance'] is not None:
             if relevance_score is None or relevance_score < custom_filters['min_score_relevance']:
+                log(f'{Fore.YELLOW}Autor {author_api_name} - {author_id} - Score: {relevance_score} decartado, el score no alcanza el mínimo{Style.RESET_ALL}')
                 continue
 
         # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
@@ -540,9 +576,9 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
         works_results = get_works_from_api(author_id)
         count_works_results = works_results['meta']['count']
-     
+
         log(f'---> {count_works_results} trabajos encontrados para autor {author_api_name} - {author_id} - Score: {relevance_score}')
-   
+
         # En algunos casos los trabajos devueltos para un autor son 0 (?!)
         if count_works_results == 0:
             # skip author
@@ -551,39 +587,51 @@ def search_author(author_original_name, author_results, limit_authors_results, i
         # check country
         if country_filter['country_code'] is not None:
             valid_country_count = 0
+            country_is_null = True
             for workFound in works_results['results']:
                 try:
                     valid_country = False
                     for autorship in workFound['authorships']:
                         for inst in autorship['institutions']:
+
+                            if inst['country_code']:
+                                # Si llega hasta acá, significa que tiene la data de intituciones/país cargada
+                                country_is_null = False
+
                             # Si un autorship de un trabajo es coincidente, lo tomamos como válido
                             if inst['country_code'] in country_filter['country_code']:
                                 valid_country = True
                                 continue
+
                         if valid_country == True:
-                            valid_country_count += 1
                             break
 
-                except Exception as error:
-                    # print(f'{Fore.YELLOW}{error}{Style.RESET_ALL}')
+                    if valid_country == True:
+                        # Sumamos un match por cada trabajo que tiene una institución
+                        # que matchea con el país buscado
+                        valid_country_count += 1
+
+                except Exception:
+                    # Capturamos error porque a veces la api no devuelve algunos de los campos
+                    # que hay que consultar
                     pass
 
-            percentage_matched = valid_country_count / count_works_results * 100
+            if country_filter['preserve_null'] != True and country_is_null == True:
+                log(f'{Fore.YELLOW}---> (X) Autor descartado porque no tiene información de país{Style.RESET_ALL}')
+                # skip author
+                continue
 
-            log(f'--> Porcentaje correspondiente al pais: {percentage_matched}')
-            
-            if country_filter['preserve_null'] != True:
-                if valid_country == False and valid_country_count == 0:
-                    valid_country = None
-                    # skip author
-                    continue
+            percentage_matched = valid_country_count / count_works_results * 100
+            log(
+                f'---> Porcentaje correspondiente al pais: {percentage_matched}')
 
             if (percentage_matched >= country_filter['match_percentage']):
-                log(f'{Fore.GREEN}---> Porcentaje mínimo alcanzado{Style.RESET_ALL}')
+                log(f'{Fore.GREEN}---> Porcentaje de concidencia de país mínimo alcanzado{Style.RESET_ALL}')
             else:
-                log(f'{Fore.YELLOW}---> Porcentaje insuficiente, autor descartado{Style.RESET_ALL}')
+                log(f'{Fore.YELLOW}---> (X) Autor descartado por baja coincidencia de país{Style.RESET_ALL}')
+                # skip author
                 continue
-        
+
         if count_works_results != 0:
             filtered_works_count = count_works_results
             total_works_count_from_author += filtered_works_count
@@ -616,7 +664,7 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
                 parse_column_values(subcolumns_list, workFounds, results)
 
-            if valid_country == None:
+            if country_filter['preserve_null'] == True and country_is_null == True:
                 res_works_no_country_output.append(results)
             else:
                 res_works_output.append(results)
@@ -878,7 +926,7 @@ def get_works_from_api(author_id, page=1):
         url=url,
         params=params
     )
-    
+
     try:
         data = r.json()
     except Exception:
@@ -902,7 +950,7 @@ def seconds_to_minutes(sec):
     min = sec / 60
 
     if (min) > 2:
-        return [round(min,2), 'minutos']
+        return [round(min, 2), 'minutos']
     else:
         return [round(sec), 'segundos']
 
@@ -942,7 +990,8 @@ def check_invalid_api_words_and_initials(author, author_api):
     '''
     # removemos tildes y mayúsculas
     author_api_normalized = remove_accents(author_api.lower())
-    author_api_normalized = author_api_normalized.replace('and ', '').replace('.', ' ').replace(',', '').replace('-', ' ').replace('  ', ' ')
+    author_api_normalized = author_api_normalized.replace('and ', '').replace(
+        ' de ', ' ').replace('.', ' ').replace(',', '').replace('-', ' ').replace('  ', ' ')
 
     # guardamos una copia de todas las palabras a matchear, y vamos removiendo a medida que matchean.
     # al remanente, lo usamos para comparar si ha iniciales
@@ -954,7 +1003,7 @@ def check_invalid_api_words_and_initials(author, author_api):
     author_normalized = remove_accents(author.lower()).replace(',', '')
     is_valid = True
 
-    for author_api_word in author_api_normalized.split(' '):        
+    for author_api_word in author_api_normalized.split(' '):
         # si es una inicial, la agregamos a una lista para compararla luego con todas las palabras que no matchean nada
         if len(author_api_word) == 1:
             initials_list.append(author_api_word)
@@ -968,7 +1017,6 @@ def check_invalid_api_words_and_initials(author, author_api):
                 # como ya matcheo esta palabra, la removemos de la comprobación futura de iniciales
                 author_api_normalized_list_initials.remove(author_api_word)
 
-
     # si hasta acá es válido el matcheo, chequeamos iniciales con el resto de las palabras
     # no matcheadas (y si es que existen iniciales)
     if is_valid and len(initials_list):
@@ -978,15 +1026,16 @@ def check_invalid_api_words_and_initials(author, author_api):
                 if initial == author_normalized_word[0]:
                     valid_initial = True
                     break
-        
+
         if not valid_initial:
             is_valid = False
-    
+
     if not is_valid:
-        log(f'{Fore.YELLOW}---> Autor {author_api} devuelto por la api no coincide con el original {author}{Style.RESET_ALL}')
+        log(f'{Fore.YELLOW}---> (X) Autor {author_api} devuelto por la api no coincide con el original {author}{Style.RESET_ALL}')
     else:
         log(f'{Fore.GREEN}---> Autor {author_api} devuelto por la api coincide con el original {author}{Style.RESET_ALL}')
-    
+
     return is_valid
+
 
 init()
