@@ -237,8 +237,9 @@ def init():
                     )
 
                     log(f'-> {works_count_2} works encontrados en segunda instancia')
-
-                    log(f'-> {works_count_1 + works_count_2 } works encontrados en total')
+                    
+                    c1 = 0 if works_count_1 == 1 else works_count_1
+                    log(f'-> {c1 + works_count_2 } works encontrados en total')
 
             if works_count_1 == None and works_count_2 == None:
                 # Diccionario donde almacenamos los autores no encontrados
