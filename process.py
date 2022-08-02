@@ -218,12 +218,11 @@ def init():
                                               i,
                                               df_input
                                               )
-
-            log(f'-> {works_count_1} works encontrados en primera instancia')
+                log(f'-> {works_count_1} works encontrados en primera instancia')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
             if secondary_search['enabled']:
-                if works_count_1 == 0 or works_count_1 <= secondary_search['min']:
+                if works_count_1 == None or works_count_1 <= secondary_search['min']:
                     log(f'-> Realizando búsqueda ampliada... {author}')
 
                     # Búsqueda secundaria
@@ -242,7 +241,7 @@ def init():
                     log(f'-> {works_count_1 + works_count_2 } works encontrados en total')
 
             if works_count_1 == None and works_count_2 == None:
-                # Diccionario donde almacenamos los autores noe ncontrados
+                # Diccionario donde almacenamos los autores no encontrados
                 res_authors_not_found.append(author)
             else:
                 count_authors += 1
