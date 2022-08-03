@@ -5,3 +5,4 @@ __pycache__
 *.csv
 extract_surnames
 _tmp
+tests.py

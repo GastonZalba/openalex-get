@@ -38,7 +38,14 @@ API_URL = 'https://api.openalex.org'
 
 # Parámetros de la API #
 PER_PAGE = 'per-page'
-PER_PAGE_VALUE = 200  # 200 resultados por página es el límite de la api
+
+# 200 resultados por página es el límite de la api, pero en algunas peticiones esto rompe y el servidor no responde
+# ej.: https://api.openalex.org/works?filter=author.id:A2162365789,type:journal-article&page=1&per-page=200
+PER_PAGE_WORKS_VALUE = 20  
+
+PER_PAGE_AUTHORS_VALUE = 100
+LIMIT_AUTHORS_PAGES = 20
+
 SEARCH = 'search'
 MAILTO = 'mailto'
 FILTER = 'filter'
@@ -60,7 +67,7 @@ res_authors_count_works = []
 
 res_authors_no_country_code = []
 
-count_authors = 0
+count_find_authors = 0
 
 last_row = 1
 
@@ -89,6 +96,7 @@ tmp_folder = '_tmp'
 log_time = datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss')
 tmp_log_filename = f'{tmp_folder}/log_tmp_{log_time}.txt'
 
+last_saved = 0
 
 def init():
 
@@ -96,7 +104,7 @@ def init():
 
     try:
 
-        global start_time, count_authors, elapsed_time, last_row, append_existing_results, file_to_continue, tmp_log_filename
+        global last_saved, start_time, count_find_authors, elapsed_time, last_row, append_existing_results, file_to_continue, tmp_log_filename
 
         # creamos carpeta para almacenar temprarios
         if not os.path.exists(tmp_folder):
@@ -117,7 +125,7 @@ def init():
             header=header
         )
 
-        log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+        log(f'{Fore.BLUE}- Uso de memoria: {usage()} -{Style.RESET_ALL}')
 
         # 0 si se empieza un archivo nuevo
         init_row_in = 0
@@ -182,7 +190,7 @@ def init():
         limit_results = get_number_prompt()
         print(f'-> Buscando {limit_results} filas')
 
-        log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+        log(f'{Fore.BLUE}- Uso de memoria: {usage()} -{Style.RESET_ALL}')
 
         # loopeamos por cada fila de la planilla
         for i in range(init_row_in, len(df_input)):
@@ -195,83 +203,124 @@ def init():
 
             log('\n')
             log(f'BÚSQUEDA NÚMERO {i + 1} - {author}')
+            log(f'Realizando búsqueda principal... {author}')
 
             # Primero buscamos el nombre del autor en la api
             author_results = get_author_from_api(author)
 
             count_author_results = author_results['meta']['count']
 
-            log(
-                f'-> Autores matcheados para el autor {author}: {count_author_results}')
-
             works_count_1 = None
             works_count_2 = None
+            works_list = []
+            works_no_country_list = []
 
             # Si la búsqueda del autor no devuelve ninguna coincidencia guardamos el dato para mostrarlo luego
             # y continuamos con el siguiente autor
             if count_author_results == 0:
                 works_count_1 = None
+                log(f'{Fore.YELLOW}-> Autor {author} no fue encontrado en búsqueda principal{Style.RESET_ALL}')
             else:
-                works_count_1 = search_author(author,
-                                              author_results,
-                                              main_search['limit_authors_results'],
-                                              i,
-                                              df_input
-                                              )
-                log(f'-> {works_count_1} works encontrados en primera instancia')
+                count_find_authors += 1
+
+                log(f'{Fore.GREEN}-> {count_author_results} autores devueltos por la API con {author}{Style.RESET_ALL}')
+
+                search = search_author(author,
+                                       author_results,
+                                       main_search['limit_authors_results'],
+                                       i,
+                                       df_input
+                                       )
+
+                works_count_1 = search['count']
+                works_list.extend(search['works'])
+                works_no_country_list.extend(search['works_no_country'])
+
+                if works_count_1:
+                    log(f'{Fore.GREEN}-> {works_count_1} trabajos encontrados en primera instancia{Style.RESET_ALL}')
+                else:
+                    log(f'{Fore.MAGENTA}-> Sin trabajos encontrados en primera instancia{Style.RESET_ALL}')
 
             # Si en una primera búsqueda no se encontró nada, hacemos una segunda más flexible
             if secondary_search['enabled']:
                 if works_count_1 == None or works_count_1 <= secondary_search['min']:
-                    log(f'-> Realizando búsqueda ampliada... {author}')
+
+                    log(f'Realizando búsqueda secundaria... {author}')
 
                     # Búsqueda secundaria
                     author_results = get_author_from_api(
                         author, search_type='secondary')
-                    works_count_2 = search_author(
-                        author,
-                        author_results,
-                        secondary_search['limit_authors_result'],
-                        i,
-                        df_input
-                    )
 
-                    log(f'-> {works_count_2} works encontrados en segunda instancia')
+                    count_author_results = author_results['meta']['count']
                     
-                    c1 = 0 if works_count_1 == None else works_count_1
-                    log(f'-> {c1 + works_count_2 } works encontrados en total')
+                    if count_author_results == 0:
+                        works_count_2 = None
+                        log(f'{Fore.YELLOW}-> Autor {author} no fue encontrado en búsqueda secundaria{Style.RESET_ALL}')
+                    else:
+                        log(f'{Fore.GREEN}-> {count_author_results} autores devueltos por la API con {author}{Style.RESET_ALL}')
+
+                        search = search_author(
+                            author,
+                            author_results,
+                            secondary_search['limit_authors_result'],
+                            i,
+                            df_input
+                        )
+
+                        works_count_2 = search['count']
+                        works_list.extend(search['works'])
+                        works_no_country_list.extend(search['works_no_country'])  
+
+                        if works_count_2:
+                            log(f'{Fore.GREEN}-> {works_count_2} trabajos encontrados en segunda instancia{Style.RESET_ALL}')
+                        else:
+                            log(f'{Fore.MAGENTA}-> Sin trabajos encontrados en segunda instancia{Style.RESET_ALL}')
+
+                        c1 = 0 if works_count_1 == None else works_count_1
+                        t = c1 + works_count_2
+
+                        if t:
+                            log(f'{Fore.GREEN}-> {c1 + works_count_2 } trabajos encontrados en total{Style.RESET_ALL}')
+     
 
             if works_count_1 == None and works_count_2 == None:
-                # Diccionario donde almacenamos los autores no encontrados
+                # Almacenamos los autores no encontrados
                 res_authors_not_found.append(author)
-            else:
-                count_authors += 1
+                log(f'{Fore.MAGENTA}-> Autor {author} no fue encontrado{Style.RESET_ALL}')
 
-            if works_count_1 == 0 and works_count_2 == 0:
-                # Diccionario donde almacenamos los autores encontrados pero sin trabajos
-                res_authors_no_works.append(author)
-            
-            results = {}
+            results = {'(ID)': i+1}
             # Obtenemos las columnas presentes en el excel original
             for col in list(df_input.columns):
-                results[col] = df_input[col][i]          
+                results[col] = df_input[col][i]
 
             # Usamos '-' si esa búsqueda no se hizo
-            # si se hizo pero no encontró resutlados, dejamos el 0
+            # si se hizo pero no encontró resultados, dejamos el 0
             c1 = '-' if works_count_1 == None else works_count_1
 
             if secondary_search['enabled']:
                 c2 = '-' if works_count_2 == None else works_count_2
                 results['Búsqueda principal'] = c1
                 results['Búsqueda secundaria'] = c2
-                results['TOTAL'] = (0 if c1 == '-' else c1) + (0 if c2 == '-' else c2)
+                results['TOTAL'] = (0 if c1 == '-' else c1) + \
+                    (0 if c2 == '-' else c2)
             else:
                 results['TOTAL'] = c1
-            
+
             # Diccionario donde almacenamos la cantidad de trabajos en cada autor
             res_authors_count_works.append(results)
 
-            log(f'{Fore.BLUE}-> Uso de memoria: {usage()}{Style.RESET_ALL}')
+            if works_count_1 == 0 and works_count_2 == 0:
+                # Diccionario donde almacenamos los autores encontrados pero sin trabajos
+                res_authors_no_works.append(author)
+                log(f'{Fore.MAGENTA}-> No se encontraron trabajos para autor {author}{Style.RESET_ALL}')
+            else:
+                # Una vez realizadas las dos búsquedas, guardamos al archivo
+                res_works_output.extend(works_list)
+                res_works_no_country_output.extend(works_no_country_list)
+            
+            last_saved = last_row
+
+            log(f'{Fore.BLUE}- Uso de memoria: {usage()} -{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
@@ -299,7 +348,7 @@ def init():
             log(f'\n{Fore.RED}ATENCIÓN, hubo errores en el procesamiento{Style.RESET_ALL}')
 
         log('\n')
-        log(f'{Fore.GREEN}--> PROCESO TERMINADO EXITOSAMENTE <--{Style.RESET_ALL}')
+        log(f'{Fore.GREEN}--> PROCESO TERMINADO <--{Style.RESET_ALL}')
 
         if use_log:
             os.rename(f'{tmp_log_filename}',
@@ -376,7 +425,7 @@ def show_stats():
     Estadísticas a mostrar para cuando se termina de ejecutar todo el script
     '''
     log(f'-----------------------------------')
-    log(f'{Fore.GREEN}Autores encontrados: {count_authors}{Style.RESET_ALL}')
+    log(f'{Fore.GREEN}Autores encontrados: {count_find_authors}{Style.RESET_ALL}')
     log(f'{Fore.GREEN}Trabajos encontrados: {len(res_works_output)}{Style.RESET_ALL}')
     log(f'{Fore.YELLOW}Autores no encontrados: {len(res_authors_not_found)}{Style.RESET_ALL}')
     log(f'{Fore.YELLOW}Autores sin trabajos: {len(res_authors_no_works)}{Style.RESET_ALL}')
@@ -490,13 +539,13 @@ def write_results():
         # Guardamos valores del procesamiento
         params = {
             'Procesamiento número': get_last_process_number() + 1,
-            'Autores encontrados': count_authors,
+            'Autores encontrados': count_find_authors,
             'Trabajos encontrados': len(res_works_output),
             'Autores no encontrados': len(res_authors_not_found),
             'Peticiones a la API': count_request,
             'Tiempo transcurrido en la descarga': f'{time} {type}',
             'Fecha': datetime.today().strftime('%Y-%m-%d %Hhs%Mm%Ss'),
-            'Último elemento': last_row
+            'Último elemento': last_saved
         }
 
         log(f'-> Escribiendo hoja "{params_sheet}"...')
@@ -545,46 +594,56 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
     authors_variations = 0
 
+    results_list = []
+
+    results_list_no_country = []
+
     # Por cada autor encontrado buscamos sus trabajos
     for author_found in author_results['results']:
 
         if authors_variations >= limit_authors_results:
             break
 
+        # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
+        author_id = author_found['id'].rsplit('/', 1)[-1]
         author_api_name = author_found['display_name']
 
+        # si este autor ya fue guardado porque matcheó una búsqueda anterior, lo salteamos
+        if author_id in author_ids:
+            log(f'-> {author_id} - {author_api_name} ya estaba analizado en búsqueda previa, salteado')
+            continue
+
+        author_ids.append(author_id)
+
         if custom_filters['discard_extra_words']:
+
             # si no matchea esta comprobación, seguimos con el siguiente autor
-            if not check_invalid_api_words_and_initials(author_original_name, author_api_name):
+            is_valid = check_invalid_api_words_and_initials(author_original_name, author_api_name)
+
+            if not is_valid:
+                log(f'{Fore.YELLOW}--> (X) {author_id} descartado: "{author_api_name}" y "{author_original_name}" no son coincidentes{Style.RESET_ALL}')
                 continue
+            else:
+                log(f'--> {author_id} válido: "{author_api_name}" y "{author_original_name}" son coincidentes')
 
         relevance_score = author_found['relevance_score'] if 'relevance_score' in author_found else None
 
         if custom_filters['min_score_relevance'] is not None:
             if relevance_score is None or relevance_score < custom_filters['min_score_relevance']:
-                log(f'{Fore.YELLOW}Autor {author_api_name} - {author_id} - Score: {relevance_score} decartado, el score no alcanza el mínimo{Style.RESET_ALL}')
+                log(f'{Fore.YELLOW}--> Autor {author_api_name} - {author_id} - Score: {relevance_score} decartado: el score no alcanza el mínimo{Style.RESET_ALL}')
                 continue
-
-        # la api devuelve una dirección url como id. Nosotros necesitamos solamente el número final (después del /)
-        author_id = author_found['id'].rsplit('/', 1)[-1]
-
-        # si este autor ya fue guardado porque matcheó una búsqueda anterior, lo salteamos
-        if author_id in author_ids:
-            continue
-
-        author_ids.append(author_id)
 
         works_results = get_works_from_api(author_id)
         count_works_results = works_results['meta']['count']
 
-        log(f'---> {count_works_results} trabajos encontrados para autor {author_api_name} - {author_id} - Score: {relevance_score}')
-
-        # En algunos casos los trabajos devueltos para un autor son 0 (?!)
+        # En algunos casos los trabajos devueltos para un autor son 0
         if count_works_results == 0:
+            log(f'{Fore.YELLOW}---> (X) {author_id} descartado: no tiene trabajos{Style.RESET_ALL}')
             # skip author
             continue
 
         # check country
+        skip_autor = False
         if country_filter['country_code'] is not None:
             valid_country_count = 0
             country_is_null = True
@@ -617,20 +676,23 @@ def search_author(author_original_name, author_results, limit_authors_results, i
                     pass
 
             if country_filter['preserve_null'] != True and country_is_null == True:
-                log(f'{Fore.YELLOW}---> (X) Autor descartado porque no tiene información de país{Style.RESET_ALL}')
+                log(f'{Fore.YELLOW}---> (X) {author_id} descartado: no tiene información de país{Style.RESET_ALL}')
                 # skip author
                 continue
 
-            percentage_matched = valid_country_count / count_works_results * 100
-            log(
-                f'---> Porcentaje correspondiente al pais: {percentage_matched}')
+            percentage_matched = round((valid_country_count / count_works_results * 100), 2)
 
-            if (percentage_matched >= country_filter['match_percentage']):
-                log(f'{Fore.GREEN}---> Porcentaje de concidencia de país mínimo alcanzado{Style.RESET_ALL}')
-            else:
-                log(f'{Fore.YELLOW}---> (X) Autor descartado por baja coincidencia de país{Style.RESET_ALL}')
+            if (percentage_matched < country_filter['match_percentage']):
                 # skip author
-                continue
+                skip_autor = True
+
+        if skip_autor:
+            log(f'{Fore.YELLOW}---> (X) {author_id} descartado: baja coincidencia de país ({percentage_matched}%){Style.RESET_ALL}')
+            continue
+        else:
+            log(f'---> {author_id} válido: porcentaje suficiente de concidencia de país ({percentage_matched}%)')
+
+        log(f'{Fore.GREEN}---> {count_works_results} trabajos hallados para autor {author_api_name} - {author_id} - Score: {relevance_score}{Style.RESET_ALL}')
 
         if count_works_results != 0:
             filtered_works_count = count_works_results
@@ -665,11 +727,15 @@ def search_author(author_original_name, author_results, limit_authors_results, i
                 parse_column_values(subcolumns_list, workFounds, results)
 
             if country_filter['preserve_null'] == True and country_is_null == True:
-                res_works_no_country_output.append(results)
+                results_list_no_country.append(results)
             else:
-                res_works_output.append(results)
+                results_list.append(results)
 
-    return total_works_count_from_author
+    return {
+        'count': total_works_count_from_author,
+        'works': results_list,
+        'works_no_country': results_list_no_country
+    }
 
 
 def parse_column_values(cols, api_values, results, num='', name=''):
@@ -746,7 +812,7 @@ def parse_column_values(cols, api_values, results, num='', name=''):
         results[f'{col_name}'] = value
 
 
-def get_author_from_api(author, search_type='main'):
+def get_author_from_api(author, search_type='main', page=1):
 
     global count_request
 
@@ -880,10 +946,12 @@ def get_author_from_api(author, search_type='main'):
     params = {
         FILTER: 'display_name.search:' + '|'.join(search),
         MAILTO: email,
-        PER_PAGE: PER_PAGE_VALUE
+        PAGE: page,
+        PER_PAGE: PER_PAGE_AUTHORS_VALUE
     }
 
-    log(f'Parámetros de búsqueda: {params[FILTER]}')
+    if page == 1:
+        log(f'> Parámetros de búsqueda: {params[FILTER]}')
 
     url = API_URL + '/authors'
 
@@ -897,7 +965,21 @@ def get_author_from_api(author, search_type='main'):
     except Exception:
         raise ValueError('La API devolvió una respuesta inválida')
 
-    count_request += 1
+    # Limitamos el pedido para no descargar cientos y cientos de páginas
+    # la api los devuelve en orden de relevancia (tentativo) y en las primeras páginas
+    # ya debeían estar los matcheos que buscamos
+    if page <= LIMIT_AUTHORS_PAGES:
+        count_request += 1
+        
+        log(f'-> Buscando autor {author}, página {page}...')
+
+        # si los resultados superan lo 10000, ya no se puede acceder mediante paginado
+        # y no existe el campo meta
+        if 'meta' in data:
+            if data['meta']['count'] > PER_PAGE_WORKS_VALUE * page:
+                new_page = get_author_from_api(author, search_type, page + 1)
+                if 'results' in new_page:
+                    data['results'] = [*data['results'], *new_page['results']]
 
     return data
 
@@ -917,7 +999,7 @@ def get_works_from_api(author_id, page=1):
         FILTER: search_filter,
         MAILTO: email,
         PAGE: page,
-        PER_PAGE: PER_PAGE_VALUE,
+        PER_PAGE: PER_PAGE_WORKS_VALUE,
     }
 
     url = API_URL + '/works'
@@ -930,13 +1012,13 @@ def get_works_from_api(author_id, page=1):
     try:
         data = r.json()
     except Exception:
-        raise ValueError('La API devolvió una respuesta invalida')
+        raise ValueError('La API devolvió una respuesta inválida')
 
     count_request += 1
 
-    log(f'--> Buscando trabajos del autor {author_id}, página {page}...')
+    log(f'---> Buscando trabajos del autor {author_id}, página {page}...')
 
-    if data['meta']['count'] > PER_PAGE_VALUE * page:
+    if data['meta']['count'] > PER_PAGE_WORKS_VALUE * page:
         new_page = get_works_from_api(author_id, page + 1)
         data['results'] = [*data['results'], *new_page['results']]
 
@@ -993,14 +1075,11 @@ def check_invalid_api_words_and_initials(author, author_api):
     author_api_normalized = author_api_normalized.replace('and ', '').replace(
         ' de ', ' ').replace('.', ' ').replace(',', '').replace('-', ' ').replace('  ', ' ')
 
-    # guardamos una copia de todas las palabras a matchear, y vamos removiendo a medida que matchean.
-    # al remanente, lo usamos para comparar si ha iniciales
-    author_api_normalized_list_initials = author_api_normalized.split(' ')
-
     initials_list = []
 
     # removemos mayúsculas
-    author_normalized = remove_accents(author.lower()).replace(',', '')
+    author_normalized = remove_accents(author.lower()).replace('-', ' ').replace(',', '').split(' ')
+
     is_valid = True
 
     for author_api_word in author_api_normalized.split(' '):
@@ -1015,27 +1094,26 @@ def check_invalid_api_words_and_initials(author, author_api):
                 break
             else:
                 # como ya matcheo esta palabra, la removemos de la comprobación futura de iniciales
-                author_api_normalized_list_initials.remove(author_api_word)
+                author_normalized.remove(author_api_word)
 
     # si hasta acá es válido el matcheo, chequeamos iniciales con el resto de las palabras
     # no matcheadas (y si es que existen iniciales)
     if is_valid and len(initials_list):
-        valid_initial = False
+        valid_initial = True
         for initial in initials_list:
-            for author_normalized_word in author_api_normalized_list_initials:
+            v = False
+            for author_normalized_word in author_normalized:
                 if initial == author_normalized_word[0]:
-                    valid_initial = True
+                    v = True
                     break
+            if v == False:
+                valid_initial = False
+                break
 
         if not valid_initial:
             is_valid = False
 
-    if not is_valid:
-        log(f'{Fore.YELLOW}---> (X) Autor {author_api} devuelto por la api no coincide con el original {author}{Style.RESET_ALL}')
-    else:
-        log(f'{Fore.GREEN}---> Autor {author_api} devuelto por la api coincide con el original {author}{Style.RESET_ALL}')
-
     return is_valid
 
-
-init()
+if __name__ == '__main__':
+    init()
