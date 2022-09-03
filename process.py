@@ -49,6 +49,7 @@ file_name = ''
 
 process_number = 0
 
+
 def init():
 
     on_error = False
@@ -92,7 +93,7 @@ def init():
         else:
             file_name = prompts.add_id_prompt()
             file_path = f"{params.file_output['folder_name']}/{file_name}"
-            
+
             # Si el archivo ya existe, cancelamos
             if os.path.exists(file_path):
                 raise ValueError('Ya existe un procesamiento con ese nombre')
@@ -117,7 +118,8 @@ def init():
         print(f'{Fore.BLUE}- Uso de memoria: {helpers.usage()} -{Style.RESET_ALL}')
 
         if file_to_continue:
-            log(f'-> El procesamiento continúa desde la fila número {init_row_in}')
+            log(
+                f'-> El procesamiento continúa desde la fila número {init_row_in}')
             last_saved = init_row_in
 
         limit_results = prompts.get_number_prompt()
@@ -260,7 +262,7 @@ def init():
             last_saved = last_row
 
             log(f'{Fore.BLUE}- Uso de memoria: {helpers.usage()} -{Style.RESET_ALL}')
-            log(f'{Fore.BLUE}- Peticiones acumuladas a la API: {api_requests.COUNT} -{Style.RESET_ALL}')
+            log(f'{Fore.BLUE}- Peticiones a la API acumuladas: {api_requests.COUNT} -{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
@@ -520,8 +522,8 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
                 if (percentage_matched < params.country_filter['match_percentage']):
                     log(f'{Fore.YELLOW}---> (X) {author_id} descartado: baja coincidencia de país ({percentage_matched}%){Style.RESET_ALL}')
-                    continue                    
-            
+                    continue
+
                 log(f'---> {author_id} válido: porcentaje suficiente de concidencia de país ({percentage_matched}%)')
 
         log(f'{Fore.GREEN}---> {count_works_results} trabajos hallados para autor {author_api_name} - {author_id} - Score: {relevance_score}{Style.RESET_ALL}')
@@ -543,7 +545,7 @@ def search_author(author_original_name, author_results, limit_authors_results, i
                 results[col] = df[col][i]
 
             results['Autor encontrado'] = author_api_name
-            results['Autor encontrado id'] = author_id                
+            results['Autor encontrado id'] = author_id
 
             results['relevance_score'] = relevance_score
 
@@ -553,7 +555,7 @@ def search_author(author_original_name, author_results, limit_authors_results, i
 
                 parse_column_values(subcolumns_list, work_founds, results)
 
-            if params.country_filter['preserve_null'] == True and country_is_null == True:
+            if country_is_null and params.country_filter['preserve_null']:
                 results_list_no_country.append(results)
             else:
                 results_list.append(results)
