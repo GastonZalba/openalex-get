@@ -260,6 +260,7 @@ def init():
             last_saved = last_row
 
             log(f'{Fore.BLUE}- Uso de memoria: {helpers.usage()} -{Style.RESET_ALL}')
+            log(f'{Fore.BLUE}- Peticiones acumuladas a la API: {api_requests.COUNT} -{Style.RESET_ALL}')
 
     except Exception as error:
         log(f'{Fore.RED}{error}{Style.RESET_ALL}')
