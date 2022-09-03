@@ -81,6 +81,7 @@ country_filter = {
     # Porcentaje de trabajos del autor matcheado para considerarlo perteneciente al país seleccionado
     # Tener en cuenta que muchos trabajos devueltos no poseen este campo, con lo cual el porcentaje
     # suele ser relativamente bajo 
+    # Ej.: 10. `None` para deshabilitar
     "match_percentage": 10,
 
     # Para descartar o mantener los valores vacíos

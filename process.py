@@ -253,7 +253,9 @@ def init():
             else:
                 # Una vez realizadas las dos búsquedas, guardamos al archivo
                 add_work(works_list)
-                add_works_no_country(works_no_country_list)
+
+                if (len(works_no_country_list)):
+                    add_works_no_country(works_no_country_list)
 
             last_saved = last_row
 
@@ -475,7 +477,6 @@ def search_author(author_original_name, author_results, limit_authors_results, i
             continue
 
         # check country
-        skip_autor = False
         if params.country_filter['country_code'] is not None:
             valid_country_count = 0
             country_is_null = True
@@ -512,18 +513,15 @@ def search_author(author_original_name, author_results, limit_authors_results, i
                 # skip author
                 continue
 
-            percentage_matched = round(
-                (valid_country_count / count_works_results * 100), 2)
+            if params.country_filter['match_percentage'] and country_is_null == False:
+                percentage_matched = round(
+                    (valid_country_count / count_works_results * 100), 2)
 
-            if (percentage_matched < params.country_filter['match_percentage']):
-                # skip author
-                skip_autor = True
-
-        if skip_autor:
-            log(f'{Fore.YELLOW}---> (X) {author_id} descartado: baja coincidencia de país ({percentage_matched}%){Style.RESET_ALL}')
-            continue
-        else:
-            log(f'---> {author_id} válido: porcentaje suficiente de concidencia de país ({percentage_matched}%)')
+                if (percentage_matched < params.country_filter['match_percentage']):
+                    log(f'{Fore.YELLOW}---> (X) {author_id} descartado: baja coincidencia de país ({percentage_matched}%){Style.RESET_ALL}')
+                    continue                    
+            
+                log(f'---> {author_id} válido: porcentaje suficiente de concidencia de país ({percentage_matched}%)')
 
         log(f'{Fore.GREEN}---> {count_works_results} trabajos hallados para autor {author_api_name} - {author_id} - Score: {relevance_score}{Style.RESET_ALL}')
 
@@ -544,12 +542,7 @@ def search_author(author_original_name, author_results, limit_authors_results, i
                 results[col] = df[col][i]
 
             results['Autor encontrado'] = author_api_name
-            results['Autor encontrado id'] = author_id
-
-            if isinstance(valid_country, bool):
-                valid_country = 0 if valid_country == False else 1
-
-            results['Código de país válido'] = valid_country
+            results['Autor encontrado id'] = author_id                
 
             results['relevance_score'] = relevance_score
 
