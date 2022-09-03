@@ -10,7 +10,7 @@ file_input = {
     "header": 1,
 
     # columna donde está guardado apellido y nombre de los autores (comienza en 0)
-    "author_column_number": 0,
+    "author_column_number": 2,
 
     # número de hoja donde se encuentran los nombres de los autores (comienza en 0)
     "sheet_number": 0
@@ -21,20 +21,22 @@ file_output = {
     # carpeta donde se guardan los resultados
     "folder_name": 'results',
 
-    # nombre principal del archivo
-    "name": 'openalex-results',
-
     # nombre secundario de archivos
     "works_sheet": 'Works',
     "works_no_country_sheet": 'Works sin coincidencia de país',
     "authors_no_works_sheet": 'Autores sin works',
     "authors_no_found_sheet": 'Autores no encontrados',
-    "auhors_count_works": 'Cantidad de trabajos por autor',
+    "authors_count_works_sheet": 'Cantidad de trabajos por autor',
     "params_sheet": 'Params',
 }
 
 # separador para usar cuando se unen valores de listas en una misma celda
 join_separator = ', '
+
+# las listas se guardan inicialmente en una misma columna con este separador
+# si hay listas embebidas, el separador se va multiplicando
+# esto posibilita luego deconstruir esa única columna en una columna por cada array
+list_column_separator = '|'
 
 main_search = {
     "limit_authors_results": 2,  # Cantidad de variaciones a guardar
