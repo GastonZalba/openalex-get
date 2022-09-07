@@ -19,7 +19,7 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 
 - Para autores que pueden estar cargados bajo un pseudónimo, ingresar los nombres posibles en la columna del archivo input, separados con un '|'. Ejemplo: `GOLDSCHVARTZ, Adriana Julieta | MARSHALL, Adriana`. En estos casos se buscarán ambas variaciones del mismo autor.
 
-- Como la generación de columnas es dinámica, porque hay columnas que se crean según la cantidad de elementos que hay en el array de un campo, esto implica que cada vez que se continúa un procesamiento incompleto, el script deba leer todas las filas guardadas anteriormente, combinarlas con lo nuevo, y volver a escribir todos los datos de nuevo (haciendo un ordenamiento de las columnas antes de escribir). Esto produce que al momento de guardado el script tarde bastante, y que incluso con listados muy grandes (o sistemas pequeños) pueda haber problemas de memoria. Del mismo modo, esta generación dinámica de columnas implica que no se pueda guardar fila por fila el archivo a medida que se obtienen los resultados, sino que haya que esperar a que el dataframe esté completo y ordenado.
+- El código escribe en los csv de salida a medida que cada autor es descargado y validado. Cuando los valores a guardar son parte de una lista (o array), o una lista dentro de otra lista, el script guardará todos esos valores en una misma columna, separando cada uno ellos con lo establecido en la variable `list_column_separator` (por defecto '|'). A medida que se desciende de nivel por cada una de estas iteraciones en diferentes niveles se agrega un caracter extra ('||', '|||', etc.). Esto posibilita recontruir luego el encolumnado múltiple/original sin importar cuántas listas hay contenidas dentro de una misma celda. Cabe aclarar que el script no crea automáticamente esta separación automática de columnas porque de otro modo no se podría ir escribiendo línea por línea, sino que habría que hacerlo al final una vez que se sepan la cantidad de columnas -y su respectivo nombre-, demandado una gran cantidad de memoria ram y largos tiempos de escritura al finalizar el proceso cuando se buscan listado muy grandes.
 
 ## Uso
 - Crear una planilla de Excel (nombre por defecto input `input.xlsx`) y colocarla en la raíz del directorio. 
@@ -29,8 +29,8 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 - Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), número de hoja, cabezera, salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
 - Cargar entorno ejecutando `.venv\Scripts\activate`
 - Ejecutar `python process.py`
-- Establecer por consola la cantidad de filas a evaluar en la ejecución
-- Si en una primera instancia no se buscan todas las filas existentes en ela rchivo de entrada, se puede retomar el trabajo en la ejecución siguiente estableciendo por consola que se desea retomar el trabajo
+- Establecer por consola una identificación del procesamiento y la cantidad de filas a evaluar en la ejecución
+- Si en una primera instancia no se buscan todas las filas existentes en el archivo de entrada, se puede retomar el trabajo en la ejecución siguiente estableciendo por consola que se desea retomar el trabajo
 
 ## Parámetros de búsqueda
 
