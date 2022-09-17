@@ -276,7 +276,7 @@ def init():
         elapsed_time = round(end_download - start_time)
 
         if file_name:
-            log(f'\n-> Terminada ejecución "{file_name}"')
+            log(f'\n-> Ejecución terminada "{file_name}"')
             update_params()
             show_stats()
             log_params()

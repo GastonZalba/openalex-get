@@ -40,6 +40,7 @@ list_column_separator = '|'
 
 main_search = {
     "limit_authors_results": 2,  # Cantidad de variaciones a guardar
+    "use_raw": True, # Buscar tal cual la celda fue agregada en la planilla sin cambios
     "use_fullname": True, # Buscar con el nombre completo
     "use_first_name_initial_second_name": True, # Buscar con el primer nombre y la inicial del segundo
     "use_first_name_only": True # Buscar solo con el primer nombre    
@@ -53,7 +54,7 @@ secondary_search = {
     "use_fullname": True, # Buscar con el nombre completo
     "use_first_name_initial_second_name": True, # Buscar con el primer nombre y la inicial del segundo
     "use_first_name_only": True, # Buscar solo con el primer nombre    
-    "use_initials_name_only": True,  # Para autores que firman solo con las iniciales
+    "use_initials_name_only": True,  # Para autores que firman solo con las iniciales en ambos nombres, o en sólo uno de ellos
     "use_second_name_only": True,  # Buscar sólo el segundo nombre
     "use_first_surname_only": True,  # Buscar sólo el primer apellido (solo se aplica a apellidos dobles)
     "use_second_surname_only": True  # Buscar sólo el segundo apellido (solo se aplica a apellidos dobles)

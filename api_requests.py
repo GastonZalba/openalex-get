@@ -116,13 +116,17 @@ def get_author(author, search_type='main', page=1):
         second_name = names_list[1] if len(names_list) > 1 else None
 
         if search_type == 'main':
+            
+            if params.main_search['use_raw']:
+                # agregamos como parámetro de búsqueda el string tal cual fue ingresado en la lista
+                search.append(f'{surname} {names}')
 
             if params.main_search['use_fullname'] == True:
                 create_accent_variation(surname, names)
 
             if params.main_search['use_first_name_initial_second_name'] and second_name is not None:
                 nn = f'{first_name} {second_name[0]}'
-                create_accent_variation(surname, nn)
+                create_accent_variation(surname, nn)        
 
             if params.main_search['use_first_name_only'] and second_name is not None:
                 # Sólo buscamos por apellido y primer nombre
@@ -139,8 +143,10 @@ def get_author(author, search_type='main', page=1):
                 if second_name is not None:
                     nn = f'{first_name[0]} {second_name[0]}'
                     create_accent_variation(surname, nn)
-                else:
-                    create_accent_variation(surname, first_name[0])
+                
+                    create_accent_variation(surname, second_name[0])
+
+                create_accent_variation(surname, first_name[0])
 
             surname_list = surname.split(' ')
 
