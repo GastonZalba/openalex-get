@@ -158,6 +158,8 @@ works_columns_to_save = [
 
     'updated_date',
 
+    'authorships.author:count',
+
     'authorships.author.display_name',
     'authorships.author.id',
     

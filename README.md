@@ -19,6 +19,8 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 
 - Para autores que pueden estar cargados bajo un pseudónimo, ingresar los nombres posibles en la columna del archivo input, separados con un '|'. Ejemplo: `GOLDSCHVARTZ, Adriana Julieta | MARSHALL, Adriana`. En estos casos se buscarán ambas variaciones del mismo autor.
 
+- Se recomienda usar un páginado que tenga poca cantidad de elementos
+
 - El código escribe en los csv de salida a medida que cada autor es descargado y validado. Cuando los valores a guardar son parte de una lista (o array), o una lista dentro de otra lista, el script guardará todos esos valores en una misma columna, separando cada uno ellos con lo establecido en la variable `list_column_separator` (por defecto '|'). A medida que se desciende de nivel por cada una de estas iteraciones en diferentes niveles se agrega un caracter extra ('||', '|||', etc.). Esto posibilita recontruir luego el encolumnado múltiple/original sin importar cuántas listas hay contenidas dentro de una misma celda. Cabe aclarar que el script no crea automáticamente esta separación automática de columnas porque de otro modo no se podría ir escribiendo línea por línea, sino que habría que hacerlo al final una vez que se sepan la cantidad de columnas -y su respectivo nombre-, demandado una gran cantidad de memoria ram y largos tiempos de escritura al finalizar el proceso cuando se buscan listado muy grandes.
 
 ## Uso
@@ -52,7 +54,7 @@ works_columns_to_save = [
 
     // Join a partir de un array de elementos. 
     // En este caso la lista de elementos se guarda en una sola celda, separados por coma
-    'concepts.display_name:join',    
+    'concepts.display_name:join',   
 
     // En los casos que se desean guardar atributos que pertenecen a un array de una categoría superior,
     // el script crea automáticamente una columna nueva por cada iteración.
@@ -64,7 +66,10 @@ works_columns_to_save = [
     // Ejemplo para guardar atributos en 3 niveles de profundidad
     'authorships.author.display_name',
     'authorships.author.id',
-    
+
+    // Número total de elementos encontrados en el array
+    'authorships.author:count',
+
     // Ejemplo para guardar atributos en 3 niveles de profundidad, 
     // y siendo uno de los de mayor jerarquía un array
     'authorships.institutions.country_code',

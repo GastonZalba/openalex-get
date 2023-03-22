@@ -595,6 +595,7 @@ def parse_column_values(cols, api_values, results, name='', arrnum=1):
             # o mantenerlos separados en dsitintas columnas
             if isinstance(value, list):
                 join = True if len(cols[i].split(':join')) > 1 else False
+                count = True if len(cols[i].split(':count')) > 1 else False
 
                 # jutamos todos los valores en una misma celda
                 if join:
@@ -603,6 +604,13 @@ def parse_column_values(cols, api_values, results, name='', arrnum=1):
                     for a in value:
                         l.append(a[col])
                     value = ', '.join(str(v) for v in l)
+                    break
+                elif count:
+                    col = cols[i].split(':count')[0]
+                    l = []
+                    for a in value:
+                        l.append(a[col])
+                    value = len(l)
                     break
                 else:
                     skip = True
