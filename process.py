@@ -678,8 +678,16 @@ def parse_column_values(cols, api_values, results, name='', arrnum=1):
         # El problema persiste incluso si se guarda como string "True" o "TRUE".
         if isinstance(value, bool):
             value = 0 if value == False else 1
+        else:
+            # Para evitar errores al concatenar valores "None"
+            if not value:
+                value = ''
 
-        results[f'{col_name}'] = value
+        if col_name in results:
+            results[col_name] = results[col_name] + \
+                create_list_separator(arrnum-1) + value
+        else:
+            results[col_name] = value
 
 
 def check_invalid_api_words_and_initials(author, author_api):
