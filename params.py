@@ -92,8 +92,8 @@ country_filter = {
 }
 
 # Filtramos los works que son journal-article
-# Ej.: `['journal-article', 'null']`. `None` para deshabilitar
-type = ['journal-article']
+# Ej.: `['article', 'null']`. `None` para deshabilitar
+type = ['article']
 
 # True para agregar tildes a través del matcheo comparativo con las listas
 use_accent_variations = True

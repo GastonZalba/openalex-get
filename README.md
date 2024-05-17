@@ -1,6 +1,9 @@
 # openalex-get
 Script configurable para extrar datos de [openalex.org](https://openalex.org/rest-api) desde una planilla excel con un listado de autores.
 
+## Anexo metodológico. Detalles del desarrollo del script
+- Ver información completa en el [release](https://github.com/GastonZalba/openalex-get/releases/tag/v1.0.0).
+
 ## Requerimientos para instalar
 - Python. [Descargar](https://www.python.org/downloads/) e instalar en el sistema si hace falta.
 - [virtualenv](https://virtualenv.pypa.io/en/latest/). Ejecutar `pip install virtualenv` desde consola.
