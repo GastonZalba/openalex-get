@@ -260,6 +260,7 @@ def init():
                     add_works_no_country(works_no_country_list)
 
             last_saved = last_row
+            update_params()
 
             log(f'{Fore.BLUE}- Uso de memoria: {helpers.usage()} -{Style.RESET_ALL}')
             log(f'{Fore.BLUE}- Peticiones a la API acumuladas: {api_requests.COUNT} -{Style.RESET_ALL}')
@@ -277,7 +278,6 @@ def init():
 
         if file_name:
             log(f'\n-> Ejecución terminada "{file_name}"')
-            update_params()
             show_stats()
             log_params()
 
@@ -289,6 +289,32 @@ def init():
         log(f'{Fore.GREEN}--> PROCESO TERMINADO <--{Style.RESET_ALL}')
         log('\n')
 
+
+
+def ovewrite_last_row_on_csv(data, sheet_name, position, index=False):
+    df = pd.DataFrame(data)
+
+    file = f'{file_path}/{file_name} - {sheet_name}.csv'
+
+    if not os.path.exists(file):
+        df.to_csv(
+            file,
+            mode='w',
+            index=index,
+            header=True,
+            encoding='utf-8-sig'
+        )
+    else:
+        existing_df = pd.read_csv(file, encoding='utf-8-sig')
+        # Insertar la nueva fila en la posición deseada
+        upper_half = existing_df.iloc[:position]
+        lower_half = existing_df.iloc[position:-1]
+        new_df = pd.concat([upper_half, df, lower_half]).reset_index(drop=True)
+        new_df.to_csv(
+            file,
+            index=index,
+            encoding='utf-8-sig'
+        )
 
 def append_row_to_csv(data, sheet_name, index=False):
     df = pd.DataFrame(data)
@@ -340,8 +366,7 @@ def add_works_no_country(list):
 
 
 def update_params():
-
-    [time, type] = helpers.seconds_to_minutes(elapsed_time)
+    [time, type] = helpers.seconds_to_minutes(timer() - start_time)
 
     # Guardamos valores del procesamiento
     params = {
@@ -355,7 +380,8 @@ def update_params():
         'Último elemento': last_saved
     }
 
-    append_row_to_csv([params], params_sheet)
+    position = process_number - 1
+    ovewrite_last_row_on_csv([params], params_sheet, position)
 
 
 def open_file_from_sheet(file, sheet):
@@ -702,9 +728,12 @@ def check_invalid_api_words_and_initials(author, author_api):
 
     initials_list = []
 
-    # removemos mayúsculas
+    # removemos mayúsculas, guiones, comas y separamos en distintos elementos en loos espacios vacíos
     author_normalized = helpers.remove_accents(author.lower()).replace(
         '-', ' ').replace(',', '').split(' ')
+    
+    # removemos elementos vacíos
+    author_normalized = list(filter(None, author_normalized))
 
     is_valid = True
 

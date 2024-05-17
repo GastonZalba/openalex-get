@@ -28,7 +28,7 @@ Script configurable para extrar datos de [openalex.org](https://openalex.org/res
 - Poner en la primer columna el apellido y nombre de los autores a buscar. `Ej: Sánchez, José Carlos` (respetar la coma luego del apellido, las mayúsculas no importan).
 - Idealmente los nombres deberían contener los tildes (ver las limitaciones de la api sobre el tema).
 - Si el archivo de entrada tiene más columnas con información, éstas serán agregadas en el mismo orden en el archivo de salida (en estos casos es recomendable utilizar cabeceras en ela rchivo de entrada para distinguir cada una de las columnas)
-- Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), número de hoja, cabezera, salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
+- Configurar el archivo [params.py](params.py) para setear las columnas a guardar, archivo de entrada (`input.xlsx` por defecto), número de hoja, cabecera, correo electrónico, salida (`openalex-results.xlsx`), etc. Ver sección [Parámetros de búsqueda](#parámetros-de-búsqueda)
 - Cargar entorno ejecutando `.venv\Scripts\activate`
 - Ejecutar `python process.py`
 - Establecer por consola una identificación del procesamiento y la cantidad de filas a evaluar en la ejecución
